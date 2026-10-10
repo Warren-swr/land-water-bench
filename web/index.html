@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f9fc">
+  <meta name="description" content="16,200 个经纬度，一张模型记忆中的地球。Land / Water 地理判断基准与模型排行榜。">
+  <title>Land / Water — Geographic Reasoning Leaderboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f8f9fc'/%3E%3Cpath d='M7 8h7v7h-7zm9 0h9v7h-9zM7 17h7v7h-7z' fill='%233955d5'/%3E%3C/svg%3E">
+  <link rel="preload" href="display.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#leaderboard">跳到排行榜</a>
+  <header class="site-header"><div class="shell nav-inner">
+    <a class="brand" href="#top" aria-label="Land Water 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>LAND<span class="brand-slash">/</span>WATER<span class="brand-suffix">BENCHMARK</span></a>
+    <nav aria-label="主导航"><a href="#leaderboard">Leaderboard</a><a href="#atlas">Atlas</a><a href="#method">Method</a><a href="https://github.com/Warren-swr/land-water-bench" target="_blank" rel="noreferrer">GitHub ↗</a></nav>
+    <span class="edition"><i></i> OCT 2026</span>
+  </div></header>
+  <main id="top">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-copy"><p class="eyebrow"><span class="tiny-cross">+</span> GEOGRAPHIC REASONING BENCHMARK</p>
+        <h1 id="hero-title">LAND <span class="hero-slash">/</span><br>WATER<span class="title-period">.</span></h1>
+        <p class="hero-description">模型的世界知识，精确到哪一个坐标？<br><span>一组经纬度，一个单词，拼出它记忆中的地球。</span></p>
+        <div class="hero-stats"><div><strong id="model-count">—</strong><span>MODELS</span></div><div><strong>16,200</strong><span>COORDINATES / MODEL</span></div><div><strong>2°</strong><span>GLOBAL GRID</span></div></div>
+      </div>
+      <div class="hero-visual"><div class="orbital-label"><span class="signal-dot"></span> THE WORLD, RECONSTRUCTED</div><canvas id="globe" width="760" height="660" aria-label="由真实参考坐标构成的旋转点阵地球"></canvas><div class="globe-caption"><span>89° N — 89° S</span><button id="motion-toggle" type="button" aria-pressed="true" aria-label="暂停地球动画">Ⅱ</button><span>REFERENCE / GSHHG</span></div></div>
+    </section>
+    <div id="error" class="shell error" role="alert" hidden></div>
+    <section class="leaderboard shell" id="leaderboard" aria-labelledby="leaderboard-title">
+      <div class="section-heading"><div><p class="eyebrow section-index">01 / THE RANKINGS</p><h2 id="leaderboard-title">Leaderboard<span class="accent-dot">.</span></h2></div><div class="section-aside"><span class="verified-mark">✓</span> 面积加权准确率 <button id="download-csv" class="icon-button" aria-label="下载排行榜 CSV" title="下载排行榜 CSV">↓</button></div></div>
+      <div class="table-toolbar"><div class="filters" role="group" aria-label="模型系列筛选"><button data-family="all" class="active" aria-pressed="true">全部 <span id="count-all">12</span></button><button data-family="GPT" aria-pressed="false">GPT</button><button data-family="Claude" aria-pressed="false">Claude</button><button data-family="other" aria-pressed="false">其他</button></div><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="model-search" type="search" placeholder="搜索模型" aria-label="搜索模型" autocomplete="off"><kbd>/</kbd></label></div>
+      <div class="table-wrap"><table id="rankings"><thead><tr><th class="rank-col" scope="col">#</th><th scope="col">模型 <span class="th-en">MODEL</span></th><th scope="col" class="accuracy-head" aria-sort="descending">准确率 <span class="sort-arrow">↓</span></th><th scope="col" class="aux-col">陆地召回</th><th scope="col" class="aux-col">水域召回</th><th scope="col" class="inspect-col"><span class="sr-only">查看模型</span></th></tr></thead><tbody id="ranking-body"></tbody></table><div class="empty-state" id="empty-state" hidden>没有匹配的模型。<button id="reset-filters" class="text-button">清除筛选 ↗</button></div></div>
+      <div class="table-footer"><p>未决项不计入分母，格式无效仍计错。<a href="#method">评分说明 ↗</a></p><span id="result-count" aria-live="polite">—</span></div>
+    </section>
+    <section class="atlas-section shell" id="atlas" aria-labelledby="atlas-title">
+      <div class="section-heading"><div><p class="eyebrow section-index">02 / BEYOND THE SCORE</p><h2 id="atlas-title">把答案，放回地球。</h2></div><p class="section-description">模型只收到经纬度，不提供地图、工具或检索。<br>每个像素是一道题，点击即可查看真实回答。</p></div>
+      <div class="atlas-toolbar"><div class="view-modes" role="group" aria-label="地图显示模式"><button data-mode="map" class="active" aria-pressed="true">模型地图</button><button data-mode="error" aria-pressed="false">错误分布</button><button data-mode="difference" aria-pressed="false">答案差异</button></div><div id="pair-summary" class="pair-summary"></div></div>
+      <div class="atlas-grid">
+        <article class="map-panel"><header><div class="map-heading"><span class="panel-letter">A</span><label><span class="sr-only">选择模型 A</span><select id="model-a" aria-label="选择模型 A"></select></label></div><div class="panel-score" id="score-a">—</div></header><div class="map-surface"><canvas id="map-a" width="1080" height="540" tabindex="0" aria-label="模型 A 地图，点击坐标查看答案"></canvas><span class="map-north">90° N</span><span class="map-south">90° S</span><span class="map-prime">0°</span></div><footer><span id="caption-a"></span><span>180° W <i>────</i> 180° E</span></footer></article>
+        <article class="map-panel"><header><div class="map-heading"><span class="panel-letter secondary">B</span><label><span class="sr-only">选择模型 B 或参考</span><select id="model-b" aria-label="选择模型 B 或参考"></select></label></div><div class="panel-score" id="score-b">—</div></header><div class="map-surface"><canvas id="map-b" width="1080" height="540" tabindex="0" aria-label="模型 B 地图，点击坐标查看答案"></canvas><span class="map-north">90° N</span><span class="map-south">90° S</span><span class="map-prime">0°</span></div><footer><span id="caption-b"></span><span>180° W <i>────</i> 180° E</span></footer></article>
+      </div>
+      <div class="atlas-footer"><div id="legend" class="legend"></div><span id="hover-coordinate">移动指针，探索一个坐标 ↗</span></div>
+      <div class="explore-bar"><span class="eyebrow">TAKE A CLOSER LOOK</span><button id="lake-example">苏必利尔湖 <span>↗</span></button><button id="difference-example">两模型的分歧点 <span>↗</span></button><button id="reference-example">参考边界分歧 <span>↗</span></button><details class="coordinate-picker"><summary>定位坐标 <span>＋</span></summary><form id="coordinate-form"><label>纬度<input id="latitude" type="number" min="-90" max="90" step="any" value="47" required></label><label>经度<input id="longitude" type="number" min="-180" max="180" step="any" value="-87" required></label><button type="submit" class="primary-button">查看 →</button></form></details></div>
+      <p id="explore-message" class="explore-message" aria-live="polite"></p>
+    </section>
+    <section class="method-section shell" id="method" aria-labelledby="method-title">
+      <div class="method-intro"><p class="eyebrow section-index">03 / THE BENCHMARK</p><h2 id="method-title">One coordinate.<br><span>One word.</span></h2><p>只问 Land 还是 Water。<br>用相同的坐标，观察模型对地理空间的记忆。</p><a class="source-link" href="https://x.com/celestepoasts/status/2103232383139057950" target="_blank" rel="noreferrer">查看原始实验灵感 ↗</a></div>
+      <div class="method-details">
+        <details open><summary><span>01</span>题目与采样<span class="toggle-sign">＋</span></summary><div class="detail-content"><p>全球 2° 网格中心，共 16,200 点。每点独立、单轮直接调用模型，无图片、地图、工具或 Agent 环境。</p><pre class="prompt">Latitude: 47.0, Longitude: -87.0.
+Land or Water? Reply with exactly one word: Land or Water.</pre></div></details>
+        <details><summary><span>02</span>准确率怎么算<span class="toggle-sign">＋</span></summary><div class="detail-content"><p>每点按 cos(纬度) 加权，减少极区密集采样造成的偏差。主分数包含格式无效答案；接口未决项从该模型的分子和分母中剔除。</p><p>只从返回正文中提取明确的 Land / Water；解释可以与答案共存，含糊、冲突或截断仍计为无效。表中的陆地、水域召回率仅统计有效标签。</p><p id="coverage-note"></p></div></details>
+        <details><summary><span>03</span>参考与边界<span class="toggle-sign">＋</span></summary><div class="detail-content"><p><a href="https://www.soest.hawaii.edu/pwessel/gshhg/" target="_blank" rel="noreferrer">GSHHG 2.3.7 完整分辨率边界 ↗</a>：湖泊和漂浮冰架记为 Water，陆地、湖中岛和接地冰体记为 Land。</p><p>静态参考不是绝对真值。与 Natural Earth 的 54 个分歧点保留计分，并在逐点查看时标注；季节水域、海岸变化和冰架口径仍存在不确定性。</p></div></details>
+        <details><summary><span>04</span>如何理解这份排名<span class="toggle-sign">＋</span></summary><div class="detail-content"><p>这是原实验的独立复现，不直接与原图横向排名。模型名称沿用实验接口别名，底层模型身份未作独立认证。各模型的推理设置、输出上限不同，分数不代表等计算预算下的对比；细小差距也不等于稳定能力差异。</p><p>本页只整理已保存的结果。<a href="data.json" download>下载结果数据 ↓</a>，或查看<a href="RESULTS.md" target="_blank">完整成绩表 ↗</a>。</p><div id="model-settings" class="settings-list"></div></div></details>
+      </div>
+    </section>
+    <footer class="site-footer shell"><a class="brand" href="#top">LAND<span class="brand-slash">/</span>WATER</a><span>OPEN SOURCE · GEOGRAPHIC REASONING</span><a href="#top">BACK TO TOP ↑</a></footer>
+  </main>
+  <div id="map-tooltip" class="map-tooltip" hidden></div>
+  <dialog id="point-dialog" aria-labelledby="point-title"><div class="dialog-head"><p class="eyebrow">COORDINATE INSPECTOR</p><button id="close-dialog" class="icon-button" aria-label="关闭坐标详情">×</button></div><h2 id="point-title"></h2><p id="point-truth" class="point-truth"></p><p id="point-reference" class="point-reference"></p><div id="point-answers"></div><button id="all-answers" class="all-answers">查看全部模型的回答 ↓</button><p class="dialog-foot">展示原始返回正文。参考标签仅用于计分，未提供给模型。</p></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

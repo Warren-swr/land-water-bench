@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "land-water-bench"
+version = "1.0.0"
+description = "Direct-model land/water classification on a reproducible global coordinate grid"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [{name = "Land / Water Bench contributors"}]
+dependencies = ["httpx>=0.28,<0.29", "PyYAML>=6,<7"]
+
+[project.optional-dependencies]
+reference = ["numpy>=2,<3", "shapely>=2.1,<3", "pyshp>=2.3,<4"]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2", "playwright>=1.49,<2", "build>=1,<2"]
+
+[project.scripts]
+lwb = "land_water_bench.cli:main"
+
+[project.urls]
+Homepage = "https://warren-swr.github.io/land-water-bench/"
+Repository = "https://github.com/Warren-swr/land-water-bench"
+Issues = "https://github.com/Warren-swr/land-water-bench/issues"
+
+[tool.setuptools]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+land_water_bench = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

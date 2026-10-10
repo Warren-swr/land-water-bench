@@ -1,0 +1,35 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -e '.[dev,reference]'
+      - run: python -m pytest -q
+      - run: lwb verify
+      - run: python -m build --outdir /tmp/land-water-packages
+      - run: lwb build
+      - run: python -m playwright install --with-deps chromium
+      - name: Browser acceptance
+        run: |
+          lwb serve --directory dist --port 8732 > /tmp/land-water-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          python scripts/check_browser.py --url http://127.0.0.1:8732/ --output runs/browser-check
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence
+          path: runs/browser-check
+          if-no-files-found: ignore

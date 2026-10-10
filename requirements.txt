@@ -1,0 +1,2 @@
+# Editable development install; runtime dependencies are in pyproject.toml.
+-e .[dev,reference]

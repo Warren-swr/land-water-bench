@@ -1,0 +1,21 @@
+# Values of *_env are environment VARIABLE NAMES, never secret values.
+# Endpoint URLs must include the complete route, e.g. /v1/responses or /v1/messages.
+# Model IDs must be available to your account; historical experiment aliases may differ.
+models:
+  responses-model:
+    model_env: LWB_RESPONSES_MODEL
+    wire: responses
+    url_env: LWB_RESPONSES_URL
+    api_key_env: LWB_RESPONSES_API_KEY
+    reasoning:
+      effort: low
+    max_output_tokens: 65536
+  messages-model:
+    model_env: LWB_MESSAGES_MODEL
+    wire: messages
+    url_env: LWB_MESSAGES_URL
+    api_key_env: LWB_MESSAGES_API_KEY
+    reasoning:
+      type: enabled
+      budget_tokens: 1024
+    max_output_tokens: 65536

@@ -1,0 +1,37 @@
+{
+  "downloaded_at": "2026-10-09T17:05:50.699025+00:00",
+  "natural_earth_commit": "ca96624a56bd078437bca8184e78163e5039ad19",
+  "natural_earth_commit_date": "2022-06-02T07:25:00Z",
+  "files": [
+    {
+      "file": "gshhg-shp-2.3.7.zip",
+      "url": "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-shp-2.3.7.zip",
+      "bytes": 149157845,
+      "sha256": "8dbbe7e071e77e9e75f2d639239099ebca8d5c16d6a07df8169729d49f15cf41"
+    },
+    {
+      "file": "GSHHG-README.txt",
+      "url": "https://www.soest.hawaii.edu/pwessel/gshhg/README.TXT",
+      "bytes": 15063,
+      "sha256": "a45418ad0a89256965ee157b2f3323185cb81e5fe534fc62812b04d526bc21fc"
+    },
+    {
+      "file": "ne_10m_land.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_land.geojson",
+      "bytes": 10157965,
+      "sha256": "1ac90796408bc6ad6911d69448485d3c4dbf2190370080368a09976e1c9f7416"
+    },
+    {
+      "file": "ne_10m_lakes.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_lakes.geojson",
+      "bytes": 5043554,
+      "sha256": "2d036f53dedec578001c5c30c2959ee7d4eebc1306900fa4367c49929ec8f2d9"
+    },
+    {
+      "file": "gshhg-bin-2.3.7.zip",
+      "url": "https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-bin-2.3.7.zip",
+      "sha256": "28600e8f7a08645aab43079326df6504212ec5ccb2b4bcf3b5f4f12ed60e82bc",
+      "bytes": 118617033
+    }
+  ]
+}
