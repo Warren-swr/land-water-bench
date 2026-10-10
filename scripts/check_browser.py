@@ -7,8 +7,9 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.parse import urljoin
+
+import httpx
 
 from playwright.sync_api import expect, sync_playwright
 
@@ -178,13 +179,12 @@ def check(url, output):
         checks.append('real data globe animates and pause control stops drawing')
         assert not errors,errors
         browser.close()
-    for path in ['gpt-6-1-sol.details.json','manifest.json','../.env','.runner.lock','gpt-5.6-sol.jsonl']:
-        for method in ['GET','HEAD']:
-            try:
-                urlopen(Request(url.rstrip('/')+'/'+path,method=method),timeout=10)
-                raise AssertionError('Unexpected resource exposed: '+path)
-            except HTTPError as error:
-                assert error.code in {403,404}
+    # Match the browser's direct connection instead of inheriting unrelated shell proxies.
+    with httpx.Client(trust_env=False, timeout=15, follow_redirects=True) as client:
+        for path in ['gpt-6-1-sol.details.json','manifest.json','../.env','.runner.lock','gpt-5.6-sol.jsonl']:
+            for method in ['GET','HEAD']:
+                response = client.request(method, urljoin(url.rstrip('/')+'/', path))
+                assert response.status_code in {403,404}, (method, path, response.status_code)
     checks.append('removed model, raw responses, manifests and private files unavailable by GET or HEAD')
     result={'passed':True,'verified_at':datetime.now(timezone.utc).isoformat(),'url':url,'run_id':data['run_id'],'models':order,'checks':checks,'console_errors':errors}
     (output/'verification.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')

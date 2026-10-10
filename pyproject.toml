@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "1.0.0"
 description = "Direct-model land/water classification on a reproducible global coordinate grid"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {file = "LICENSE"}
+license = "MIT AND LGPL-3.0-only"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt"]
 authors = [{name = "Land / Water Bench contributors"}]
 dependencies = ["httpx>=0.28,<0.29", "PyYAML>=6,<7"]
 
@@ -23,9 +24,6 @@ lwb = "land_water_bench.cli:main"
 Homepage = "https://warren-swr.github.io/land-water-bench/"
 Repository = "https://github.com/Warren-swr/land-water-bench"
 Issues = "https://github.com/Warren-swr/land-water-bench/issues"
-
-[tool.setuptools]
-license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
