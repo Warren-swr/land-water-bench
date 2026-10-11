@@ -6,6 +6,8 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
+from check_model_comparison import check_model_comparison
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -17,7 +19,8 @@ def main():
     errors = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(executable_path=args.chromium, headless=True, args=["--no-sandbox"])
-        page = browser.new_page(viewport={"width": 1440, "height": 1080}, device_scale_factor=1)
+        context = browser.new_context(viewport={"width": 1440, "height": 1080}, device_scale_factor=1)
+        page = context.new_page()
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(args.url)
         page.wait_for_selector('#prediction[aria-busy="false"]')
@@ -156,6 +159,7 @@ def main():
         page.locator('[data-layer="elevation"]').click()
         page.locator("#explore").screenshot(path=str(args.output / "atlas-map.png"))
         page.locator('[data-view="map"]').click()
+        comparison_checks = check_model_comparison(page, data, ref, args.url, args.output, errors)
         layouts = []
         for width in [1440, 768, 390, 320]:
             page.set_viewport_size({"width": width, "height": 1080})
@@ -177,7 +181,8 @@ def main():
                  "point_checks": point_checks,
                  "reference_mask_checked": True, "rotation_checked": True, "layouts": layouts, "browser_errors": errors}
         proof.update(filters_checked=True, csv_checked=True, hero_motion_checked=True,
-                     map_layers_checked=True, coordinate_navigation_checked=True)
+                     map_layers_checked=True, coordinate_navigation_checked=True,
+                     model_comparison=comparison_checks)
         (args.output / "verification.json").write_text(json.dumps(proof, ensure_ascii=False, indent=2) + "\n")
         print(json.dumps(proof, ensure_ascii=False))
         browser.close()

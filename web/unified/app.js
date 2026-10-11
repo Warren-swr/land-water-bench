@@ -8,14 +8,23 @@
   const displayNames = {'gpt-6-astra':'GPT-6 Astra','gpt-5.6-sol':'GPT-5.6 Sol','gpt-5.6-terra':'GPT-5.6 Terra','claude-opus-5-5':'Claude Opus 5.5','claude-sonnet-5-5':'Claude Sonnet 5.5','claude-haiku-5-5':'Claude Haiku 5.5','kimi-k3':'Kimi K3','mimo-v2.6-pro':'MiMo V2.6 Pro','qwen3.8-max':'Qwen 3.8 Max','deepseek-v4.1-flash':'DeepSeek V4.1 Flash','step-5-preview':'Step 5 Preview','seed-2.1':'Seed 2.1'};
   const statusNames = {ok:'有效回答',invalid:'无效回答',infra_error:'请求未决'};
   const nameOf = m => displayNames[m.name] || m.name;
-  let metadata, reference, model = null, records = null, classificationRecords = null;
-  let selected = 6596, yaw = -100, pitch = 20, hits = {}, redraw = false, loading = 0;
-  let terrainError = null, classificationError = null;
+  let metadata, reference, referenceRows, model = null, records = null;
+  let selected = 6596, yaw = -100, pitch = 20, hits = {}, redraw = false;
+  const panels = Object.fromEntries(['a','b'].map(key => [key, {
+    name:'reference', model:null, rows:null, classRows:null, error:null, classError:null, busy:false, token:0
+  }]));
+  let pair = null;
   let family = 'all', search = '', view = 'map', layer = 'elevation';
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let motion = !reduceMotion.matches, heroVisible = false, heroFrame = 0, heroTime = 0, heroYaw = 12;
   const rasters = new Map();
   const cache = new Map();
+  const pending = new Map();
+  const panelName = panel => panel.model ? nameOf(panel.model) : '全球参考';
+  const panelRow = (panel, p) => panel.model ? panel.rows?.[p.id] : referenceRows?.[p.id];
+  const ready = panel => !panel.model || Boolean(panel.rows);
+  const focusPanel = () => panels.b.model ? panels.b : panels.a.model ? panels.a : null;
+  const differenceLayer = () => ['class-diff','height-diff'].includes(layer);
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -23,16 +32,20 @@
     return node;
   }
   async function json(path) {
-    const response = await fetch(path, {cache:'no-store'});
+    let response;
+    try { response = await fetch(path,{cache:'no-store'}); }
+    catch { throw new Error('结果读取失败，请刷新重试。'); }
     if (!response.ok) throw new Error('结果读取失败（HTTP ' + response.status + '），请刷新重试。');
     return response.json();
   }
   async function loadRecords(path) {
     if (cache.has(path)) return cache.get(path);
-    const rows = await json(path);
-    cache.set(path, rows);
-    if (cache.size > 6) cache.delete(cache.keys().next().value);
-    return rows;
+    if (!pending.has(path)) pending.set(path, json(path).then(rows => {
+      cache.set(path, rows);
+      if (cache.size > 8) cache.delete(cache.keys().next().value);
+      return rows;
+    }).finally(() => pending.delete(path)));
+    return pending.get(path);
   }
 
   function canvas(id) { const c=$(id),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.font='11px Arial';return {ctx,w,h}; }
@@ -50,13 +63,72 @@
     return row?.status === 'invalid' || (row?.status === 'ok' &&
       (row.label !== p.truth || Math.abs(row.prediction.elevation_m - p.elevation_m) > 500));
   }
-  function pointColor(p, predicted) {
-    const row = records?.[p.id];
-    if (predicted && row?.status !== 'ok') return row?.status === 'invalid' ? colors.invalid : colors.unresolved;
-    if (layer === 'classification') return (predicted ? row.label : p.truth) ? colors.solid : colors.water;
+  function comparable(a, b, height = false) {
+    return a?.status === 'ok' && b?.status === 'ok' && (!height ||
+      (Number.isFinite(a.prediction.elevation_m) && Number.isFinite(b.prediction.elevation_m)));
+  }
+  function deltaColor(delta) {
+    const t = Math.min(1,Math.abs(delta) / 2000), neutral = [234,238,247];
+    const end = delta < 0 ? [57,85,213] : [184,101,55];
+    return 'rgb(' + neutral.map((v,i) => Math.round(v + (end[i] - v) * t)).join(',') + ')';
+  }
+  function pointColor(p, panel) {
+    const row = panelRow(panel,p);
+    if (differenceLayer()) {
+      const a = panelRow(panels.a,p), b = panelRow(panels.b,p);
+      if (a?.status === 'infra_error' || b?.status === 'infra_error') return colors.unresolved;
+      if (a?.status === 'invalid' || b?.status === 'invalid') return colors.invalid;
+      if (!comparable(a,b,layer === 'height-diff')) return colors.masked;
+      if (layer === 'class-diff') return a.label === b.label ? colors.correct : row.label ? '#b86537' : '#3955d5';
+      const delta = b.prediction.elevation_m - a.prediction.elevation_m;
+      return deltaColor(panel === panels.a ? -delta : delta);
+    }
+    if (row?.status !== 'ok') return row?.status === 'invalid' ? colors.invalid : colors.unresolved;
+    if (layer === 'classification') return row.label ? colors.solid : colors.water;
     if (p.elevation_m == null) return colors.masked;
-    if (layer === 'error') return predicted && wrong(p, row) ? colors.error : colors.correct;
-    return heightColor(predicted ? row.prediction.elevation_m : p.elevation_m);
+    if (layer === 'error') return panel.model && wrong(p,row) ? colors.error : colors.correct;
+    return heightColor(row.prediction.elevation_m);
+  }
+  function updatePair() {
+    pair = null;
+    const summary = $('pair-summary'); summary.replaceChildren();
+    for (const key of ['classComparable','classDifferent','heightComparable','heightDifferent','heightMean']) delete summary.dataset[key];
+    $('difference-example').disabled = true;
+    if (!ready(panels.a) || !ready(panels.b)) {
+      summary.textContent = panels.a.error || panels.b.error || '正在读取左右两侧结果…';
+      return;
+    }
+    pair = {classComparable:0,classIds:[],heightComparable:0,heightIds:[],heightSum:0};
+    for (const p of reference.points) {
+      const a = panelRow(panels.a,p), b = panelRow(panels.b,p);
+      if (comparable(a,b)) {
+        pair.classComparable++;
+        if (a.label !== b.label) pair.classIds.push(p.id);
+      }
+      if (comparable(a,b,true)) {
+        pair.heightComparable++;
+        const delta = Math.abs(a.prediction.elevation_m - b.prediction.elevation_m);
+        pair.heightSum += delta;
+        if (delta > 500) pair.heightIds.push(p.id);
+      }
+    }
+    const mean = pair.heightComparable ? pair.heightSum / pair.heightComparable : null;
+    Object.assign(summary.dataset,{classComparable:pair.classComparable,classDifferent:pair.classIds.length,
+      heightComparable:pair.heightComparable,heightDifferent:pair.heightIds.length,heightMean:mean ?? ''});
+    for (const [label,value,total] of [['分类分歧',pair.classIds.length,pair.classComparable],['高程差 >500 m',pair.heightIds.length,pair.heightComparable]]) {
+      const item = el('span');
+      item.append(document.createTextNode(label + ' '),el('strong','',value.toLocaleString('en-US')),
+        document.createTextNode(' / ' + total.toLocaleString('en-US') + ' 点'));
+      summary.append(item);
+    }
+    const meanItem = el('span'); meanItem.append(document.createTextNode('平均 |高程差| '),el('strong','',meters(mean))); summary.append(meanItem);
+    $('difference-example').disabled = !differenceIds().length;
+  }
+  function differenceIds() {
+    if (!pair) return [];
+    if (layer === 'class-diff' || layer === 'classification') return pair.classIds;
+    if (layer === 'height-diff' || layer === 'elevation') return pair.heightIds;
+    return [...new Set([...pair.classIds,...pair.heightIds])].sort((a,b) => a - b);
   }
   function heroGlobe() {
     if (!reference) return;
@@ -108,14 +180,17 @@
     cancelAnimationFrame(heroFrame); heroTime = 0;
     if (motion && heroVisible && !document.hidden) heroFrame = requestAnimationFrame(animateHero);
   }
-  function flatMap(id, predicted) {
-    const {ctx,w,h} = canvas(id), key = predicted ? 'prediction' : 'reference';
-    if (predicted && !records) { loadingMap(ctx,w,h); return; }
+  function mapReady(panel) {
+    return ready(panel) && (!differenceLayer() || (ready(panels.a) && ready(panels.b)));
+  }
+  function flatMap(id, panel) {
+    const {ctx,w,h} = canvas(id), key = id;
+    if (!mapReady(panel)) { loadingMap(ctx,w,h,panel); return; }
     if (!rasters.has(key)) {
       const raster = document.createElement('canvas'); raster.width = 180; raster.height = 90;
       const pixels = raster.getContext('2d');
       for (const p of reference.points) {
-        pixels.fillStyle = pointColor(p, predicted);
+        pixels.fillStyle = pointColor(p,panel);
         pixels.fillRect(p.id % 180, Math.floor(p.id / 180), 1, 1);
       }
       rasters.set(key, raster);
@@ -130,19 +205,19 @@
     ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); ctx.setLineDash([]);
     ctx.lineWidth = 1.5; ctx.strokeRect(x - 5,y - 5,10,10);
   }
-  function loadingMap(ctx,w,h) {
+  function loadingMap(ctx,w,h,panel) {
     ctx.fillStyle = colors.muted; ctx.textAlign = 'center';
-    ctx.fillText(terrainError || '读取已保存的高程预测…',w / 2,h / 2);
+    ctx.fillText(panel.error || (differenceLayer() && (panels.a.error || panels.b.error)) || '读取已保存的高程预测…',w / 2,h / 2);
   }
-  function globe(id,predicted) {
+  function globe(id,panel) {
     const {ctx,w,h}=canvas(id),cx=w/2,cy=h/2,R=Math.min(w*.39,h*.40);hits[id]=[];
     ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.fillStyle='#eef1f8';ctx.fill();ctx.strokeStyle=colors.grid;ctx.lineWidth=.7;
     for(let lat=-60;lat<=60;lat+=30){ctx.beginPath();let on=false;for(let lon=-180;lon<=180;lon+=3){const [x,y,z]=project(lat,lon);if(z>=0){if(on)ctx.lineTo(cx+x*R,cy-y*R);else ctx.moveTo(cx+x*R,cy-y*R);on=true;}else on=false;}ctx.stroke();}
     for(let lon=-180;lon<180;lon+=30){ctx.beginPath();let on=false;for(let lat=-90;lat<=90;lat+=3){const [x,y,z]=project(lat,lon);if(z>=0){if(on)ctx.lineTo(cx+x*R,cy-y*R);else ctx.moveTo(cx+x*R,cy-y*R);on=true;}else on=false;}ctx.stroke();}
     ctx.fillStyle='#c6cddd';for(const p of reference.points){if(!p.truth)continue;const [x,y,z]=project(p.lat,p.lon);if(z>0){ctx.beginPath();ctx.arc(cx+x*R,cy-y*R,Math.max(.6,R*.008),0,Math.PI*2);ctx.fill();}}
-    if(predicted&&!records){loadingMap(ctx,w,h);return;}
+    if(!mapReady(panel)){loadingMap(ctx,w,h,panel);return;}
     const dots=[];
-    for(const p of reference.points){const row=records?.[p.id],e=predicted?row?.prediction?.elevation_m:p.elevation_m;const radius=layer==='classification'?1:1+Math.max(-10000,Math.min(10000,e||0))/40000;const [x,y,z]=project(p.lat,p.lon,radius);if(z<=0)continue;const [sx,sy]=project(p.lat,p.lon);dots.push({id:p.id,x:cx+x*R,y:cy-y*R,z,sx:cx+sx*R,sy:cy-sy*R,color:pointColor(p,predicted)});}
+    for(const p of reference.points){const e=panelRow(panel,p)?.prediction?.elevation_m;const radius=layer==='classification'||differenceLayer()?1:1+Math.max(-10000,Math.min(10000,e||0))/40000;const [x,y,z]=project(p.lat,p.lon,radius);if(z<=0)continue;const [sx,sy]=project(p.lat,p.lon);dots.push({id:p.id,x:cx+x*R,y:cy-y*R,z,sx:cx+sx*R,sy:cy-sy*R,color:pointColor(p,panel)});}
     dots.sort((a,b)=>a.z-b.z);
     for(const d of dots){if(d.id===selected){ctx.strokeStyle=d.color;ctx.globalAlpha=.45;ctx.beginPath();ctx.moveTo(d.sx,d.sy);ctx.lineTo(d.x,d.y);ctx.stroke();ctx.globalAlpha=1;}ctx.fillStyle=d.color;ctx.beginPath();ctx.arc(d.x,d.y,d.id===selected?4:1.1,0,Math.PI*2);ctx.fill();hits[id].push(d);}
     const chosen=dots.find(d=>d.id===selected);if(chosen){ctx.strokeStyle=colors.ink;ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(chosen.x,chosen.y,7,0,Math.PI*2);ctx.stroke();}
@@ -163,23 +238,34 @@
   function answerStatus(row) { return row?.error_type === 'content_filter' ? '请求未决 · 内容过滤' : statusNames[row?.status]; }
 
   function details() {
-    const p = reference.points[selected], r = records?.[selected], c = classificationRecords?.[selected];
+    const p = reference.points[selected];
     const kind = p.truth ? 'Solid' : 'Water';
     $('point-title').textContent = coordinate(p);
-    $('point-values').textContent = '参考 ' + kind + ' · ' + (p.elevation_m == null ? '高程不可评分' : meters(p.elevation_m)) +
-      ' → 预测 ' + (r?.prediction?.type || statusNames[r?.status] || '读取中') + ' · ' + meters(r?.prediction?.elevation_m);
+    $('point-values').textContent = '冻结参考 ' + kind + ' · ' + (p.elevation_m == null ? '高程不可评分' : meters(p.elevation_m));
     $('point-error').textContent = '#' + selected + ' · ' + p.lat + '°, ' + p.lon + '° · ' +
-      (p.elevation_m == null ? explainReason(p.height_reference_reason) :
-        r?.prediction ? '绝对误差 ' + meters(Math.abs(r.prediction.elevation_m - p.elevation_m)) :
-        answerStatus(r) || '读取回答中');
+      (p.elevation_m == null ? explainReason(p.height_reference_reason) : '分类与高程参考有效');
     $('prompt').textContent = reference.prompt_template.replace('{lat:.1f}', p.lat.toFixed(1)).replace('{lon:.1f}', p.lon.toFixed(1));
-    $('answer').textContent = terrainError ?? r?.text ?? (r?.status === 'infra_error' ? '请求未决；无可用模型回答。' : '读取回答中…');
-    $('classification-label').textContent = c?.status === 'ok' ? (c.label ? 'Solid' : 'Water') : statusNames[c?.status] || '';
-    $('classification-point-note').textContent = model?.classification ?
-      '独立分类任务 · ' + (model.classification.source_model || model.name) + ' · 同一坐标 · 参考 ' + kind + (c ? ' · ' + answerStatus(c) : '') :
-      '此模型没有独立分类任务结果。';
-    $('classification-answer').textContent = classificationError ?? c?.text ??
-      (model?.classification ? c?.status === 'infra_error' ? '请求未决；无可用模型回答。' : '读取回答中…' : '—');
+    for (const [key,suffix] of [['a','-a'],['b','']]) {
+      const panel = panels[key], row = panelRow(panel,p), c = panel.classRows?.[selected];
+      $('answer-title' + suffix).textContent = key.toUpperCase() + ' · ' + panelName(panel);
+      $('point-value' + suffix).textContent = panel.error || (row?.status === 'ok' ? row.prediction.type + ' · ' +
+        (row.prediction.elevation_m == null ? '高程不可评分' : meters(row.prediction.elevation_m)) +
+        (panel.model && p.elevation_m != null ? ' · 对参考误差 ' + meters(Math.abs(row.prediction.elevation_m - p.elevation_m)) : '') : answerStatus(row) || '读取回答中…');
+      $('terrain-answer-panel' + suffix).hidden = !panel.model;
+      $('answer' + suffix).textContent = panel.error ?? row?.text ?? (panel.model ? row?.status === 'infra_error' ? '请求未决；无可用模型回答。' : '读取回答中…' : '冻结参考，不是模型回答。');
+      $('classification-answer-panel' + suffix).hidden = !panel.model;
+      $('classification-label' + suffix).textContent = c?.status === 'ok' ? (c.label ? 'Solid' : 'Water') : statusNames[c?.status] || '';
+      $('classification-point-note' + suffix).textContent = panel.model?.classification ?
+        '独立分类任务 · ' + (panel.model.classification.source_model || panel.name) + ' · 同一坐标 · 参考 ' + kind + (c ? ' · ' + answerStatus(c) : '') : '此模型没有独立分类任务结果。';
+      $('classification-answer' + suffix).textContent = panel.classError ?? c?.text ?? (panel.model?.classification ? c?.status === 'infra_error' ? '请求未决；无可用模型回答。' : '读取回答中…' : '—');
+    }
+    const a = panelRow(panels.a,p), b = panelRow(panels.b,p);
+    const classNote = comparable(a,b) ? a.label === b.label ? '分类一致' : '分类不同' : '分类无法比较';
+    const delta = comparable(a,b,true) ? b.prediction.elevation_m - a.prediction.elevation_m : null;
+    const deltaNode = $('point-delta');
+    deltaNode.textContent = classNote + ' · ' + (delta == null ? '高程无法比较：缺少一侧有效数值' : '高程 B − A = ' + (delta > 0 ? '+' : '') + meters(delta));
+    deltaNode.dataset.heightDelta = delta ?? '';
+    deltaNode.dataset.classDifferent = comparable(a,b) ? String(a.label !== b.label) : '';
     $('point').value = String(selected);
     $('previous').disabled = selected === 0;
     $('next').disabled = selected === reference.points.length - 1;
@@ -187,8 +273,8 @@
   function draw() {
     if (!reference) return;
     const paint = view === 'map' ? flatMap : globe;
-    paint('reference', false);
-    paint('prediction', true);
+    paint('reference', panels.a);
+    paint('prediction', panels.b);
     scatter();
     details();
   }
@@ -210,8 +296,12 @@
     }
   }
   function updateSummary() {
-    const s = model.terrain.metrics;
     $('model-summary').replaceChildren();
+    if (!model) {
+      $('model-summary').append(el('p','caption','两侧均为参考。选择模型后可查看评分。'));
+      return;
+    }
+    const s = model.terrain.metrics;
     const metrics = [
       ['更严格 · 联合 ±100 m', pct(s.joint_accuracy['100']), '分类与高程同时正确'],
       ['更宽松 · 联合 ±1,000 m', pct(s.joint_accuracy['1000']), '分类与高程同时正确'],
@@ -224,37 +314,56 @@
       $('model-summary').append(stat);
     }
   }
-  async function setModel(name) {
-    const chosen = metadata.models.find(m => m.name === name && m.terrain);
-    if (!chosen) return;
-    const token = ++loading;
-    model = chosen;
-    records = classificationRecords = null;
+  function syncPanels() {
+    const focus = focusPanel(), side = focus === panels.b ? 'B' : 'A';
+    model = focus?.model || null;
+    records = focus?.rows || null;
     rasters.clear();
-    terrainError = classificationError = null;
-    $('prediction').setAttribute('aria-busy', 'true');
-    $('model').value = name;
-    $('selected-model').textContent = nameOf(chosen);
-    $('selected-model').dataset.model = name;
-    $('prediction-score').textContent = pct(chosen.terrain.metrics.joint_accuracy['500']);
-    $('error-example').disabled = true;
-    document.querySelectorAll('#ranking tr').forEach(row => row.classList.toggle('row-selected', row.dataset.model === name));
+    for (const [key,selectId,canvasId,scoreId] of [['a','model-a','reference','reference-score'],['b','model','prediction','prediction-score']]) {
+      const panel = panels[key];
+      $(selectId).value = panel.name;
+      $(canvasId).setAttribute('aria-busy',String(panel.busy));
+      $(canvasId).dataset.model = panel.name;
+      $(scoreId).textContent = panel.model ? pct(panel.model.terrain.metrics.joint_accuracy['500']) : 'REF';
+      $(scoreId).title = panel.model ? '联合准确率 · ±500 m' : '冻结地理参考';
+    }
+    $('selected-model').textContent = panelName(panels.b);
+    $('selected-model').dataset.model = panels.b.name;
+    $('focus-model').textContent = model ? side + ' · ' + nameOf(model) : '请选择一个模型';
+    $('scatter-model').textContent = model ? '参考 vs. ' + side + ' · ' + nameOf(model) : '请选择模型';
+    $('scatter').setAttribute('aria-label',model ? '参考高程与 ' + side + ' ' + nameOf(model) + ' 预测的散点图' : '选择模型后显示散点图');
+    $('strata-model').textContent = model ? side + ' · ' + nameOf(model) + ' · 联合 ±500 m' : '请选择模型查看各高程档成绩';
+    $('error-example').disabled = !records || !reference.points.some(p => p.elevation_m != null && wrong(p,records[p.id]));
+    $('error-example').title = model ? '查看 ' + side + ' · ' + nameOf(model) + ' 的联合判断错误' : '请选择模型';
+    document.querySelectorAll('#ranking tr').forEach(row => row.classList.toggle('row-selected',row.dataset.model === model?.name));
     updateSummary();
     updateStrata();
-    queueDraw();
+    updatePair();
+    updateMapControls();
+  }
+  async function setPanel(key,name) {
+    if (!metadata) return;
+    const chosen = metadata.models.find(m => m.name === name && m.terrain) || null;
+    if (name !== 'reference' && !chosen) return;
+    const panel = panels[key], token = ++panel.token;
+    Object.assign(panel,{name,model:chosen,rows:null,classRows:null,error:null,classError:null,busy:!!chosen});
+    $('explore-message').textContent = '';
+    syncPanels();
+    if (!chosen) { draw(); return; }
     const results = await Promise.allSettled([
       loadRecords(chosen.terrain.details_url),
       chosen.classification ? loadRecords(chosen.classification.details_url) : Promise.resolve(null)
     ]);
-    if (token !== loading) return;
-    if (results[0].status === 'fulfilled') records = results[0].value;
-    else terrainError = results[0].reason.message;
-    if (results[1].status === 'fulfilled') classificationRecords = results[1].value;
-    else classificationError = results[1].reason.message;
-    $('error-example').disabled = !records || !reference.points.some(p => p.elevation_m != null && wrong(p, records[p.id]));
+    if (token !== panel.token) return;
+    if (results[0].status === 'fulfilled') panel.rows = results[0].value;
+    else panel.error = results[0].reason.message;
+    if (results[1].status === 'fulfilled') panel.classRows = results[1].value;
+    else panel.classError = results[1].reason.message;
+    panel.busy = false;
+    syncPanels();
     draw();
-    $('prediction').setAttribute('aria-busy', 'false');
   }
+  const setModel = name => setPanel('b',name);
   function scoreCell(value) {
     const cell = el('td', 'primary-col');
     if (value == null) { cell.append(el('span', 'missing', '—')); return cell; }
@@ -295,7 +404,7 @@
       identity.append(el('span', 'rank', s ? String(rank).padStart(2, '0') : '—'), el('span', 'family-icon ' + family, badge));
       const title = el('div'), modelName = el(s ? 'button' : 'span', 'model-name' + (s ? ' model-button' : ''), nameOf(m));
       if (s) {
-        modelName.setAttribute('aria-label', '查看 ' + nameOf(m) + ' 的联合任务');
+        modelName.setAttribute('aria-label', '在右侧查看 ' + nameOf(m) + ' 的联合任务');
         modelName.addEventListener('click', () => {
           setModel(m.name);
           $('explore').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
@@ -325,7 +434,7 @@
     $('empty-state').hidden = visible.length > 0;
     $('result-count').textContent = visible.length + ' / ' + metadata.models.length + ' MODELS';
   }
-  function paintMetadata(preferredName) {
+  function paintMetadata(preferred = {}) {
     renderLeaderboard();
     $('count-all').textContent = metadata.models.length;
     for (const [id, task] of [['terrain-count','terrain'], ['classification-count','classification']]) {
@@ -353,10 +462,14 @@
     $('source-notes').textContent = '联合任务：' + metadata.sources.terrain.run_id + '；仅分类任务：' +
       metadata.sources.classification.run_id + '。完整来源和指标见页尾「结果与口径」。';
     const available = metadata.models.filter(m => m.terrain);
-    $('model').replaceChildren();
-    for (const m of available) $('model').add(new Option(nameOf(m), m.name));
-    $('model').disabled = !available.length;
-    if (available.length) setModel(available.find(m => m.name === preferredName)?.name || available[0].name);
+    for (const [key,id] of [['a','model-a'],['b','model']]) {
+      $(id).replaceChildren(new Option('全球参考','reference'));
+      for (const m of available) $(id).add(new Option(nameOf(m),m.name));
+      $(id).disabled = false;
+      const fallback = key === 'a' ? 'reference' : available[0]?.name || 'reference';
+      const name = preferred[key] === 'reference' || available.some(m => m.name === preferred[key]) ? preferred[key] : fallback;
+      setPanel(key,name);
+    }
   }
 
   async function refreshRecovery() {
@@ -365,7 +478,7 @@
       const fresh = await json('data.json');
       if (fresh.sources.terrain.dataset_sha256 !== reference.dataset_sha256) throw new Error('参考版本变化，请刷新页面。');
       if (fresh.run_id !== metadata.run_id || fresh.built_at !== metadata.built_at) {
-        const current = model?.name;
+        const current = {a:panels.a.name,b:panels.b.name};
         metadata = fresh;
         cache.clear();
         paintMetadata(current);
@@ -381,6 +494,7 @@
   }
   function selectPoint(id, orient = false, reveal = false) {
     if (!reference) return;
+    $('explore-message').textContent = '';
     selected = Math.max(0, Math.min(reference.points.length - 1, id));
     const p = reference.points[selected];
     if (orient) { yaw = -p.lon; pitch = Math.max(-80,Math.min(80,p.lat)); }
@@ -406,8 +520,11 @@
   function updateMapControls() {
     rasters.clear();
     $('worlds').classList.toggle('is-map',view === 'map');
-    for (const [id,label] of [['reference','全球参考'],['prediction','模型预测']]) {
+    for (const [key,id] of [['a','reference'],['b','prediction']]) {
+      const panel = panels[key], label = key.toUpperCase() + ' · ' + panelName(panel);
       $(id).setAttribute('aria-label',label + (view === 'globe' ? '地球，可拖动旋转' : '平面地图') + '，点击采样点或用方向键选择坐标');
+      $('panel-' + key + '-caption').textContent = layer === 'height-diff' ? key.toUpperCase() + ' − ' + (key === 'a' ? 'B' : 'A') + ' · 高程差' :
+        layer === 'class-diff' ? key.toUpperCase() + ' · 仅高亮分类分歧' : panel.model ? 'MODEL PREDICTION' : 'FROZEN REFERENCE';
     }
     for (const key of ['view','layer']) document.querySelectorAll('[data-' + key + ']').forEach(button => {
       const active = button.dataset[key] === (key === 'view' ? view : layer);
@@ -415,20 +532,32 @@
     });
     const legend = $('map-legend'); legend.replaceChildren();
     const entries = layer === 'elevation' ? [] : layer === 'classification' ?
-      [[colors.solid,'固体'],[colors.water,'水体']] : [[colors.correct,'联合正确'],[colors.error,'联合错误']];
+      [[colors.solid,'固体'],[colors.water,'水体']] : layer === 'class-diff' ?
+        [['#b86537','分歧 · 该侧为固体'],['#3955d5','分歧 · 该侧为水体'],[colors.correct,'分类一致']] :
+        layer === 'height-diff' ? [] : [[colors.correct,'联合正确'],[colors.error,'联合错误']];
     if (layer === 'elevation') {
       const scale = el('span'), swatch = el('i','height-scale');
       swatch.style.background = 'linear-gradient(90deg,' + heightStops.map(([value,rgb]) => 'rgb(' + rgb.join(',') + ') ' + ((value + 10000) / 160) + '%').join(',') + ')';
       scale.append(el('span','','−10,000 m'),swatch,el('span','','+6,000 m')); legend.append(scale);
     }
-    for (const [color,label] of [...entries,[colors.invalid,'无效'],[colors.unresolved,'未决'],...(layer === 'classification' ? [] : [[colors.masked,'高程参考不可评分']])]) {
+    if (layer === 'height-diff') {
+      const scale = el('span'), swatch = el('i','height-scale');
+      swatch.style.background = 'linear-gradient(90deg,' + deltaColor(-2000) + ',' + deltaColor(0) + ',' + deltaColor(2000) + ')';
+      scale.append(el('span','','低于另一侧 −2,000 m'),swatch,el('span','','+2,000 m 高于另一侧')); legend.append(scale);
+    }
+    const showMask = !['classification','class-diff'].includes(layer);
+    for (const [color,label] of [...entries,[colors.invalid,differenceLayer() ? '任一无效' : '无效'],[colors.unresolved,differenceLayer() ? '任一未决' : '未决'],...(showMask ? [[colors.masked,layer === 'height-diff' ? '缺少高程数值' : '高程参考不可评分']] : [])]) {
       const item = el('span'), swatch = el('i'); swatch.style.background = color; item.append(swatch,el('span','',label)); legend.append(item);
     }
     $('hover-coordinate').textContent = view === 'map' ? '点击网格 · 查看坐标回答 ↗' : '拖动旋转 · 点击采样点 ↗';
     const note = layer === 'classification' ? '固体 / 水体视图来自联合任务回答；榜单“仅分类准确率”来自另一次独立任务。' :
-      layer === 'error' ? '右图标出类型错误或高程误差 >500 m 的点；高程参考不可评分点、无效回答与未决分别标注。' :
+      layer === 'class-diff' ? '仅高亮两侧分类不同的点，颜色表示该侧的固体 / 水体回答。分类来自联合任务，分歧不等于错误。' :
+      layer === 'height-diff' ? '每侧显示“该侧 − 另一侧”的高程差：蓝色更低、橙色更高；色阶固定在 ±2,000 m，原始差值见坐标详情。模型之间可比较的高程不要求有参考真值；差异不代表误差。' :
+      layer === 'error' ? '各模型分别与冻结参考比较：类型错误或高程误差 >500 m 的点标为联合错误；高程参考不可评分点、无效与未决分别标注。' :
         '颜色表示海床到山峰的高程，色阶两端截在 −10,000 / +6,000 m。';
-    $('plot-note').textContent = note + (view === 'globe' && layer !== 'classification' ? ' 径向高程夸张约 160 倍，显示范围 ±10,000 m。' : '') + ' 所有采样点直接绘制，不做插值；评分使用原始数值。';
+    $('plot-note').textContent = note + (view === 'globe' && ['elevation','error'].includes(layer) ? ' 径向高程夸张约 160 倍，显示范围 ±10,000 m。' : '') +
+      ' 分歧统计仅比较两侧有效值，逐点计数、不加权；所有采样点直接绘制，不做插值。';
+    $('difference-example').disabled = !differenceIds().length;
     queueDraw();
   }
   for (const id of ['reference','prediction']) {
@@ -462,6 +591,11 @@
   }
   $('scatter').addEventListener('click',event => { const point = hitPoint('scatter',event); if (point != null) selectPoint(point,true); });
   $('model').addEventListener('change',() => setModel($('model').value));
+  $('model-a').addEventListener('change',() => setPanel('a',$('model-a').value));
+  $('swap-models').addEventListener('click',() => {
+    const a = panels.a.name, b = panels.b.name;
+    setPanel('a',b); setPanel('b',a);
+  });
   $('point').addEventListener('change',() => selectPoint(Math.round(Number($('point').value) || 0),true));
   $('previous').addEventListener('click',() => selectPoint(selected - 1,true));
   $('next').addEventListener('click',() => selectPoint(selected + 1,true));
@@ -479,7 +613,15 @@
     if (!candidates.length) return;
     const p = candidates.find(p => p.id > selected) || candidates[0];
     selectPoint(p.id,true,true);
-    $('explore-message').textContent = '联合判断错误：' + coordinate(p) + '。原始回答见下方。';
+    $('explore-message').textContent = nameOf(model) + ' 联合判断错误：' + coordinate(p) + '。原始回答见下方。';
+  });
+  $('difference-example').addEventListener('click',() => {
+    const ids = differenceIds();
+    if (!ids.length) return;
+    const id = ids.find(id => id > selected) ?? ids[0];
+    selectPoint(id,true,true);
+    $('explore-message').textContent = (['classification','class-diff'].includes(layer) ? '分类分歧' : ['elevation','height-diff'].includes(layer) ? '高程相差超过 500 m' : '分类或高程分歧') +
+      '：' + coordinate(reference.points[id]) + '。两侧原始回答见下方。';
   });
   function filterLeaderboard() {
     document.querySelectorAll('[data-family]').forEach(button => {
@@ -517,6 +659,9 @@
     }
     metadata = data;
     reference = ref;
+    referenceRows = Object.fromEntries(ref.points.map(p => [p.id,{
+      status:'ok',label:p.truth,prediction:{type:p.truth ? 'Solid' : 'Water',elevation_m:p.elevation_m}
+    }]));
     paintMetadata();
     updateMapControls();
     heroGlobe();
