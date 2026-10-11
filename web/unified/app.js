@@ -241,6 +241,7 @@
     const p = reference.points[selected];
     const kind = p.truth ? 'Solid' : 'Water';
     $('point-title').textContent = coordinate(p);
+    $('inspect-point').setAttribute('aria-label','查看已选点 ' + coordinate(p) + ' 的两侧回答');
     $('point-values').textContent = '冻结参考 ' + kind + ' · ' + (p.elevation_m == null ? '高程不可评分' : meters(p.elevation_m));
     $('point-error').textContent = '#' + selected + ' · ' + p.lat + '°, ' + p.lon + '° · ' +
       (p.elevation_m == null ? explainReason(p.height_reference_reason) : '分类与高程参考有效');
@@ -492,7 +493,7 @@
   function coordinate(p) {
     return Math.abs(p.lat) + '° ' + (p.lat >= 0 ? 'N' : 'S') + ' / ' + Math.abs(p.lon) + '° ' + (p.lon >= 0 ? 'E' : 'W');
   }
-  function selectPoint(id, orient = false, reveal = false) {
+  function selectPoint(id, orient = false) {
     if (!reference) return;
     $('explore-message').textContent = '';
     selected = Math.max(0, Math.min(reference.points.length - 1, id));
@@ -500,11 +501,10 @@
     if (orient) { yaw = -p.lon; pitch = Math.max(-80,Math.min(80,p.lat)); }
     $('hover-coordinate').textContent = coordinate(p) + ' · #' + selected;
     queueDraw();
-    if (reveal) $('inspect').scrollIntoView({behavior:reduceMotion.matches ? 'instant' : 'smooth',block:'nearest'});
   }
   function locate(lat,lon) {
     const id = Math.max(0,Math.min(89,Math.round((89 - lat) / 2))) * 180 + Math.max(0,Math.min(179,Math.round((lon + 179) / 2)));
-    selectPoint(id,true,true);
+    selectPoint(id,true);
     $('explore-message').textContent = '已定位到最近的采样点：' + coordinate(reference.points[id]) + '。';
   }
   function hitPoint(id,event) {
@@ -580,7 +580,7 @@
       }
     });
     $(id).addEventListener('pointerup',event => {
-      if (last && !moved) { const point = hitPoint(id,event); if (point != null) selectPoint(point,false,true); }
+      if (last && !moved) { const point = hitPoint(id,event); if (point != null) selectPoint(point); }
       last = null;
     });
     $(id).addEventListener('pointercancel',() => last = null);
@@ -612,14 +612,14 @@
     const candidates = reference.points.filter(p => p.elevation_m != null && wrong(p,records[p.id]));
     if (!candidates.length) return;
     const p = candidates.find(p => p.id > selected) || candidates[0];
-    selectPoint(p.id,true,true);
+    selectPoint(p.id,true);
     $('explore-message').textContent = nameOf(model) + ' 联合判断错误：' + coordinate(p) + '。原始回答见下方。';
   });
   $('difference-example').addEventListener('click',() => {
     const ids = differenceIds();
     if (!ids.length) return;
     const id = ids.find(id => id > selected) ?? ids[0];
-    selectPoint(id,true,true);
+    selectPoint(id,true);
     $('explore-message').textContent = (['classification','class-diff'].includes(layer) ? '分类分歧' : ['elevation','height-diff'].includes(layer) ? '高程相差超过 500 m' : '分类或高程分歧') +
       '：' + coordinate(reference.points[id]) + '。两侧原始回答见下方。';
   });
