@@ -2,6 +2,7 @@ import copy
 
 import pytest
 
+from land_water_bench.atlas import build_atlas, grid, tolerance_curve
 from land_water_bench.core import make_grid
 from land_water_bench.unified import combine
 
@@ -80,3 +81,18 @@ def test_pending_or_uncertified_terrain_cannot_be_published():
     terrain["models"][0]["verified"] = False
     with pytest.raises(ValueError, match="not been verified"):
         combine(terrain, classification, reference)
+
+
+def test_tolerance_curve_follows_official_inclusion_rules():
+    points = [{"id": i, "truth": 1, "weight": 1.0, "elevation_m": 0.0, "height_reference_status": "ok"}
+              for i in range(4)]
+    points.append({"id": 4, "truth": 1, "weight": 1.0, "elevation_m": None, "height_reference_status": "unsupported"})
+    ok = lambda label, height: {"status": "ok", "label": label, "prediction": {"elevation_m": height}}
+    records = {0: ok(1, 150), 1: ok(0, 0), 2: {"status": "invalid"}, 3: {"status": "infra_error"}, 4: ok(1, 0)}
+    # Unresolved and unscorable cells leave the denominator; invalid and misclassified cells stay wrong.
+    assert tolerance_curve(points, records, (100, 200)) == [0, 1 / 3]
+    assert grid(points, records)["state"] == "SWIUS"
+    metrics = {"joint_accuracy": {"100": 0, "500": 1 / 3, "1000": 1 / 3}}
+    with pytest.raises(ValueError, match="disagrees"):
+        build_atlas(points, [("m", {"joint_accuracy": {"100": .5, "500": 1 / 3, "1000": 1 / 3}}, records)])
+    assert build_atlas(points, [("m", metrics, records)])["models"]["m"]["tolerance_curve"][4] == 1 / 3

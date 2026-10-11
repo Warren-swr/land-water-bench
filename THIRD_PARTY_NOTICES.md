@@ -22,6 +22,10 @@ Comparison labels and lake names use Natural Earth 1:10m land/lakes at commit `c
 
 `web/display.ttf` is Space Grotesk, Copyright 2020 The Space Grotesk Project Authors. See the unmodified [SIL Open Font License](web/FONT-LICENSE.txt) bundled beside the font and copied to every site build.
 
+## three.js
+
+`web/unified/vendor/three.module.min.js` is a minified subset of [three.js](https://threejs.org/) r186 (npm `three@0.186.1`), Copyright 2010-2026 three.js authors, under the [MIT License](web/unified/vendor/THREE-LICENSE.txt). It is copied unchanged into every unified site build. Rebuild steps are in `web/unified/vendor/README.txt`.
+
 ## Model responses and inspiration
 
 The coordinate responses in `results/` are saved outputs from the named experiment aliases. Original compilation, scoring code, documentation, and presentation are MIT-licensed where owned by the contributors. Model responses and trademarks are not represented as project-authored intellectual property or relicensed to override third-party terms. No model weights, service credentials, or access rights are included.

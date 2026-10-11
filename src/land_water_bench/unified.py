@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import shutil
 
+from .atlas import build_atlas
 from .config import safe_name
 from .core import PROMPT, atomic_json, digest, make_grid
 from .results import read, require, seal, verify_results, verify_seal
@@ -117,6 +118,7 @@ def build(terrain_dir: Path, classification_dir: Path, output: Path, assets: Pat
     for task, directory in [("terrain", terrain_dir), ("classification", classification_dir)]:
         data["sources"][task]["data_sha256"] = digest((directory / "data.json").read_bytes())
     output.mkdir(parents=True)
+    atlas_models = []
     for model in data["models"]:
         for task, directory in [("terrain", terrain_dir), ("classification", classification_dir)]:
             entry = model[task]
@@ -129,14 +131,20 @@ def build(terrain_dir: Path, classification_dir: Path, output: Path, assets: Pat
                 require(original["details_sha256"] == checksum, "Verified terrain responses changed")
             entry["details_sha256"] = checksum
             shutil.copy2(source, output / entry["details_url"])
+            if task == "terrain":
+                atlas_models.append((model["name"], entry["metrics"], {int(k): v for k, v in read(source).items()}))
     public_reference = copy.deepcopy(reference)
     public_reference["classification_prompt_template"] = PROMPT
     atomic_json(output / "reference.details.json", public_reference)
     atomic_json(output / "data.json", data)
+    atomic_json(output / "atlas.json", build_atlas(reference["points"], atlas_models))
     (output / "RESULTS.md").write_text(result_table(data))
     project = assets.resolve().parent.parent
-    for name in ("index.html", "style.css", "app.js"):
-        shutil.copy2(assets / name, output / name)
+    for source in sorted(assets.rglob("*")):
+        if source.is_file():
+            target = output / source.relative_to(assets)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
     for name in ("display.ttf", "FONT-LICENSE.txt"):
         shutil.copy2(assets.parent / name, output / name)
     for source, target in [("LICENSE", "LICENSE"), ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),

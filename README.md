@@ -21,7 +21,7 @@ Inspired by [Celeste’s experiment](https://x.com/celestepoasts/status/21032323
 - **12 models × 2 tasks × 16,200 coordinates = 388,800 records**, including final answer text, predictions, invalid and unresolved states, settings, completion evidence, and frozen checksums.
 - Frozen **GSHHG 2.3.7** classification and **ETOPO 2022 / EGM2008** elevation references. The terrain input includes all prompts, four native cell values per point, and the predeclared height mask.
 - Direct API runners for Responses and Messages protocols, per-model concurrency, bounded retries, checkpointing, and resumable runs.
-- One light-themed leaderboard with model filters, CSV export, and globe/flat-map views. Each map can show any model or the reference; compare classification disagreements and signed elevation differences, swap sides, and inspect both models’ answers. Joint classification + elevation remains the primary ranking; independent classification stays in its own column.
+- One dark-themed results page: the leaderboard with model filters and CSV export; a tolerance study (joint accuracy from ±100 m to ±2,000 m in 100 m steps, with a live re-ranking); a three.js relief globe per model with a signed-error mode; a swipe map comparing any two models or the reference; a scroll-driven “draining the ocean” view of every depth band; and a coordinate inspector with both models’ raw answers. Joint classification + elevation at ±500 m remains the primary ranking; independent classification stays in its own column.
 - Offline verification, static-site building, tests, and GitHub Pages deployment. No external workspace paths, private data mounts, or symlinks are required.
 
 The latest snapshot is **2026-10-11**, after timeout recovery and answer-extraction corrections. It contains 471 invalid / 723 unresolved terrain records and 40 invalid / 2 unresolved classification records. Seed 0902 and 0915 are displayed as one model, as explicitly confirmed, while retaining each task’s original source identity.
@@ -122,6 +122,6 @@ lwb serve --directory dist-check --port 8733
 python scripts/check_unified_browser.py --url http://localhost:8733/ --output runs/browser-check
 ```
 
-Tests use mock APIs. CI verifies the bundled references, extraction and scores, builds the unified site, and tests model switching, sorting, answers, globe interaction and mobile widths. GitHub Pages builds the same site from the repository and publishes only `dist/`; it never needs model credentials or local run archives. For a fork, enable **Settings → Pages → GitHub Actions** and update the repository links.
+Tests use mock APIs. CI verifies the bundled references, extraction and scores, builds the unified site, and tests model switching, sorting, answers, the tolerance curves, the WebGL globes, the swipe map and mobile widths. GitHub Pages builds the same site from the repository and publishes only `dist/`; it never needs model credentials or local run archives. For a fork, enable **Settings → Pages → GitHub Actions** and update the repository links.
 
 Original code: MIT. GSHHG-derived labels retain LGPL-3.0 notices, the font retains its OFL license, and upstream data and model responses retain applicable terms. [Third-party notices](THIRD_PARTY_NOTICES.md).
