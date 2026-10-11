@@ -1,14 +1,17 @@
-# Frozen result collections
+# Frozen result releases
 
-`2026-10-10/` contains 12 public experiment aliases and 194,400 final coordinate responses. All scores and answer bodies were preserved from the local collection; this release reorganizes and verifies them without making new model requests.
+The default release is **2026-10-11**: 12 models, two tasks, 16,200 coordinates per model/task, 388,800 records. `lwb verify` checks both tasks; `lwb build` produces the unified terrain-first leaderboard.
 
-- `data.json`: ranking metrics, prediction strings, reference metadata, and display names.
-- `<model>.details.json`: every coordinate's ID, status, label, and final answer text.
-- `reference.details.json`: reference category, lake names, and uncertainty flags.
-- `provenance.json`: parser/scoring versions, historical settings, incomplete-response IDs, selective replay metadata, and unresolved IDs. Model aliases are not independent identity attestations.
-- `verification.json`: offline verification receipt; recompute it with `lwb verify`.
-- `FILES.sha256`: immutable content checksums; Git records the release's history.
+- `2026-10-11/release.json`: release layout and source data hashes.
+- `2026-10-11/terrain/`: joint Solid/Water and elevation results, final answer bodies, predictions, completion metadata and masked reference.
+- `2026-10-11/classification/`: independent classification results, final answer bodies, settings and replay/recovery provenance.
+- `2026-10-11/RESULTS.md`: combined scores and scoring rules.
+- `2026-10-10/`: unchanged historical classification snapshot; explicitly select it with `lwb verify --results results/2026-10-10`.
 
-Private endpoint configuration, credentials, request headers, provider response envelopes, and operational logs are excluded. This is enough to reproduce all displayed scores and audit final-answer extraction, but not to independently attest the original gateway/model identity. The historical raw evidence remains with the experiment owner.
+Every result package has a `FILES.sha256` manifest. The complete terrain input is bundled under `src/land_water_bench/data/terrain-global-dataset.json`; its SHA-256 remains the exact pre-run reference hash. The latest result texts and metrics are byte-identical to the audited 2026-10-11 answer-revision export. Publication removes an absolute local recovery path from classification provenance and exposes only a run identifier.
 
-Do not edit a frozen collection. Export a new directory for new runs or scoring policies. API availability, provider behavior, geographic reference versions, and parsing versions must be reported with a new submission. See the [protocol](../docs/PROTOCOL.md) and [third-party notices](../THIRD_PARTY_NOTICES.md).
+The latest extraction revision restored 41 terrain answers and 280 classification answers, and reclassified four filtered terrain responses as unresolved. Invalid totals are now 471 / 40; unresolved totals are 723 / 2. The former scores and original run evidence were preserved, and re-extraction made zero model calls.
+
+`response-metadata.json` retains the completion reasons, output counts, source-response hashes and line references needed to distinguish filtered and truncated responses. Full provider envelopes, private endpoints, request headers and operational logs are not published. The included evidence is sufficient to reproduce all displayed scores and answer extraction, but not independently attest provider identity or reproduce a historical model response.
+
+Do not edit a frozen collection. Create and seal a new directory for new runs or scoring rules. Assets live in `web/` and are assembled from these collections rather than being duplicated in each result package. Derived references retain their upstream notices; see [third-party notices](../THIRD_PARTY_NOTICES.md).

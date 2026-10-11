@@ -1,16 +1,18 @@
-# Land / Water Bench 中文说明
+# Land / Water / Elevation Bench
 
-输入一个经纬度，让模型只回答 Land 或 Water，再把全球 16,200 个答案拼成地图。所有请求直接调用模型 API，不提供 Agent、工具、地图、检索或历史对话。
+输入经纬度，预测固体或水体及高程。主榜按“分类正确且高程误差不超过 500 米”的面积加权准确率排列，同时展示独立分类任务的准确率。每点直接调用模型，不提供 Agent、工具、地图、参考答案或历史对话。
 
-[在线排行榜](https://warren-swr.github.io/land-water-bench/) · [完整成绩](../results/2026-10-10/RESULTS.md) · [英文说明](../README.md)
+[在线排行榜](https://warren-swr.github.io/land-water-bench/) · [最新成绩](../results/2026-10-11/RESULTS.md) · [英文说明](../README.md)
 
-仓库包含独立运行框架、当前 12 个模型的逐点结果、冻结的 GSHHG 参考、浅色交互页面和 GitHub Pages 自动部署配置。
+仓库已包含 12 个模型、两项任务、每项 16,200 点，共 388,800 条结果，以及冻结参考、逐点回答、评分代码和页面源码。最新快照为 2026-10-11：联合任务 471 条无效、723 条未决；独立分类 40 条无效、2 条未决。
 
-## 本地查看
+## 克隆后查看
 
-Python 3.11 以上；运行框架支持 Linux/macOS，Windows 可用 WSL。
+Python 3.11 以上，支持 Linux/macOS；Windows 可使用 WSL。
 
 ```bash
+git clone https://github.com/Warren-swr/land-water-bench.git
+cd land-water-bench
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
@@ -19,37 +21,38 @@ lwb build
 lwb serve --directory dist --port 8732
 ```
 
-打开 <http://localhost:8732>。查看和重新核分不需要 API Key，也不会重新调用模型。再次构建时，使用新的输出目录，或仅移除上次生成的 `dist/`。
+打开 <http://localhost:8732>。默认校验并展示两项最新任务；不需要 API Key、外部工作区或下载地理源文件。再次构建可使用新的 `--output` 目录。
 
 ## 运行模型
 
-复制 `configs/models.example.yaml` 为被忽略的 `configs/local.yaml`，配置完整 API 地址、密钥环境变量和实际可用模型 ID。凭据只通过环境变量读取，不写进公开配置；程序不自动加载 `.env`。支持 Responses 和 Messages 两种接口格式。
+复制 `configs/models.example.yaml` 为 `configs/local.yaml`，按配置中的环境变量提供完整 API 地址、密钥和实际可用模型 ID。配置支持 Responses 和 Messages；程序不自动读取 `.env`。
 
 ```bash
+# 联合任务：先用 8 点检查自己的接口。
+lwb run-terrain --config configs/local.yaml --models responses-model \
+  --run-dir runs/terrain-smoke --limit 8 --concurrency 2 --max-retries 3
+
+# 联合任务：全量，使用仓库自带的冻结输入。
+lwb run-terrain --config configs/local.yaml --models responses-model \
+  --run-dir runs/terrain-full --concurrency 512 --max-retries 1000
+
+# 单独分类。
 lwb run --config configs/local.yaml --models responses-model \
-  --run-dir runs/smoke --limit 8 --concurrency 2 --max-retries 3
-lwb run --config configs/local.yaml --models responses-model messages-model \
-  --run-dir runs/full-001 --concurrency 512 --max-retries 1000
+  --run-dir runs/classification-full --concurrency 512 --max-retries 1000
 ```
 
-新框架中的并发是 **每个模型单独计算** ：两个模型各 512，合计最高 1,024。先小规模验证接口，再使用新目录正式运行。每点默认最多 1,000 次重试，恢复运行保留原重试预算。输出上限默认 65,536，能否使用取决于接口。超时会重试；普通答错和格式无效不会自动重采样。
+并发按 **每个模型** 计算。默认输出上限 65,536 tokens，接口需要支持该参数。联合任务首次读取时限 300 秒，读取超时后为 600 秒，默认最多重试两次；限流预算另计。原样重复命令可恢复未封存运行，累计尝试次数不会清零。普通答错和无效回答不会为了得分重采样。
 
-运行完成后，可冻结、导出并展示：
+[运行与导出](RUNNING.md) · [高程协议与集合展示](TERRAIN-GLOBAL.md) · [未决恢复](RECOVERY.md) · [离线抽取修订](REEXTRACTION.md)
 
-```bash
-lwb verify-run --run-dir runs/full-001 --seal
-lwb export-run --run-dir runs/full-001 --output results/full-001
-lwb build --results results/full-001 --output dist-full
-```
+## 评分口径
 
-更完整的恢复、截断重跑和追加结果说明见 [RUNNING.md](RUNNING.md)。
+- 全球 16,200 个坐标使用纬度余弦权重；15,928 点可评分高程，其余 272 点仍参与分类。
+- 无效回答计错；未决 API 请求从分子、分母剔除并展示覆盖率。内容过滤统一归入未决，包括返回 HTTP 200 的过滤。
+- 已兼容正文解释、公式花括号、相同 JSON 重复与明确更正。真正的语法或字段错误、空正文、截断仍无效；不从思考字段抽答案。
+- 主榜使用联合任务；“仅分类”列来自另一次独立分类任务，不能和联合任务内部的分类指标混用。
+- Seed 0902 与 0915 已按明确确认合为同一模型，保留两次任务的原始来源。
 
-## 分数口径
+参考为 GSHHG 2.3.7 与 ETOPO 2022 / EGM2008 固定数据版本，不是无误差的物理真值。模型名是实验网关别名；历史推理预算、输出上限和重试情况不同，细小分差不代表稳定能力差异。
 
-主分数按纬度余弦加权。无效答案计错；未决 API 请求从该模型的分子和分母剔除。当前公开结果共 194,400 条，3 条未决，320 条无效。解释和明确答案可以共存，但含糊、冲突和截断仍无效。
-
-参考使用 GSHHG 2.3.7：湖泊、漂浮冰架为 Water；陆地、湖中岛、接地冰为 Land。与 Natural Earth 的 54 个分歧点仍保留计分，详情会标注。静态参考不是绝对真值。
-
-模型名沿用实验接口别名，没有独立认证底层模型身份，也不代表公开 API 一定提供同名模型。历史运行的推理设置、输出上限不完全一致，包含有记录的截断重跑和失败恢复；细小分差不代表稳定能力差异。
-
-代码采用 MIT 许可证，参考数据、字体等保留各自上游许可。详情见 [第三方声明](../THIRD_PARTY_NOTICES.md)。
+当前结果保存在 `results/2026-10-11/`，旧分类快照保存在 `results/2026-10-10/`。结果包、参考与源码都在仓库中；私有凭据、连接和完整原始接口日志保留在实验归档，不参与公开构建。GitHub Pages 通过 Actions 从同一仓库校验、构建和部署。

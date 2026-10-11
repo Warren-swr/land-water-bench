@@ -1,5 +1,7 @@
 # Running and adding results
 
+The primary terrain task uses `lwb run-terrain` with the bundled global input, followed by `lwb export-terrain-run` for a completed single-model run. See [terrain commands](TERRAIN-GLOBAL.md). The `lwb run`, `verify-run` and `export-run` commands below apply to the independent classification task.
+
 ## Configuration
 
 `configs/models.example.yaml` demonstrates both supported wire formats. A model entry has:

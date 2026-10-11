@@ -58,6 +58,24 @@ def is_content_filter(error) -> bool:
 
 
 class Runner:
+    protocol = PROTOCOL
+    answer_version = ANSWER_VERSION
+    score_version = SCORE_VERSION
+    source_url = SOURCE_URL
+    source_files = SOURCE_FILES
+
+    def make_dataset(self):
+        return make_dataset()
+
+    def config_updates(self):
+        return {}
+
+    def project_answer(self, row, wire):
+        return reextract_record(row, wire)
+
+    def score_records(self, points, records):
+        return exclude_unresolved(metrics(points, records))
+
     def __init__(self, args):
         self.args = args
         self.run = args.run_dir.resolve()
@@ -70,6 +88,7 @@ class Runner:
         self.records = {m.name: {} for m in self.models}
         self.attempts = Counter()
         self.read_timeouts = set()
+        self.timeout_attempts = Counter()
         self.http_counts = Counter()
         self.returned_models = {m.name: set() for m in self.models}
         self.stop = asyncio.Event()
@@ -89,13 +108,16 @@ class Runner:
         self.lock = (self.run / ".runner.lock").open("a+")
         fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self.export.mkdir(parents=True, exist_ok=True)
-        config = {"protocol": PROTOCOL, "models": [m.public() for m in self.models],
+        config = {"protocol": self.protocol, "models": [m.public() for m in self.models],
                   "concurrency": self.args.concurrency, "max_retries": self.args.max_retries,
                   "timeout_seconds": self.args.timeout, "shuffle_seed": self.args.seed,
-                  "limit": self.args.limit, "source": SOURCE_URL,
-                  "concurrency_scope": "per model", "answer_parser": ANSWER_VERSION,
-                  "score_policy": SCORE_VERSION,
+                  "limit": self.args.limit, "source": self.source_url,
+                  "concurrency_scope": "per model", "answer_parser": self.answer_version,
+                  "score_policy": self.score_version,
                   "endpoint_sha256": {m.name: digest(m.url.encode()) for m in self.models}}
+        config.update(self.config_updates())
+        if getattr(self.args, "max_timeout_retries", None) is not None:
+            config["max_timeout_retries"] = self.args.max_timeout_retries
         replay_from = getattr(self.args, "replay_truncated_from", None)
         if replay_from:
             if len(self.models) != 1 or self.args.limit:
@@ -127,13 +149,13 @@ class Runner:
                 self.manifest["execution_revisions"] = revisions
                 atomic_json(self.run / "manifest.json", self.manifest)
         else:
-            dataset = make_dataset()
+            dataset = self.make_dataset()
             atomic_json(self.run / "dataset.json", dataset)
             atomic_json(config_file, config)
             snapshot = self.run / "source"
             snapshot.mkdir(exist_ok=True)
             hashes = {}
-            for name in SOURCE_FILES:
+            for name in self.source_files:
                 shutil.copy2(ROOT / name, snapshot / name)
                 hashes[name] = digest((ROOT / name).read_bytes())
             self.manifest = {
@@ -171,6 +193,7 @@ class Runner:
                 self.previous_retries += bool(entry.get("retry"))
                 if entry.get("error") == "ReadTimeout":
                     self.read_timeouts.add(key)
+                    self.timeout_attempts[key] += 1
         for model in self.models:
             for row in read_jsonl(self.run / (model.name + ".jsonl"), recover_tail=True):
                 if self.replay and row["sample_id"] not in replay_ids:
@@ -197,7 +220,7 @@ class Runner:
         row = {"sample_id": point["id"], "model": model.name, "attempts": attempt,
                "time": now(), "label": None, **kwargs}
         if row["status"] != "infra_error":
-            projected = reextract_record(row, model.wire)
+            projected = self.project_answer(row, model.wire)
             row.update(projected)
         row = redact(row, self.secrets)
         self.log(model.name, row)
@@ -263,6 +286,10 @@ class Runner:
                          or error_type in {"rate_limit_error", "rate_limit_exceeded", "overloaded_error"}
                          or (200 <= http_status < 300 and body is None))
             retry = not success and retryable and attempt <= self.args.max_retries
+            timeout_budget = getattr(self.args, "max_timeout_retries", None)
+            if error == "ReadTimeout" and timeout_budget is not None:
+                self.timeout_attempts[key] += 1
+                retry = retry and self.timeout_attempts[key] <= timeout_budget
             delay = retry_delay(attempt, retry_after) if retry else None
             self.http_counts[str(http_status)] += 1
             self.log("attempts", {"event": "end", "time": now(), "model": model.name,
@@ -295,7 +322,7 @@ class Runner:
         models = []
         for model in self.models:
             records = self.records[model.name]
-            score = exclude_unresolved(metrics(self.points, records))
+            score = self.score_records(self.points, records)
             pixels = ["5"] * len(self.dataset["points"])
             for idx in self.selected:
                 pixels[idx] = "4"
@@ -322,7 +349,7 @@ class Runner:
                                          "pending": len(self.replay["sample_ids"]) - len(completed)}
             atomic_json(self.export / (model.name + ".details.json"), details)
         data = {"run_id": self.run.name, "created_at": self.manifest["created_at"], "updated_at": now(),
-                "state": self.state, "config": self.config, "source": SOURCE_URL,
+                "state": self.state, "config": self.config, "source": self.source_url,
                 "elapsed_seconds": (datetime.now(timezone.utc) - datetime.fromisoformat(self.manifest["created_at"])).total_seconds(),
                 "inflight": self.inflight, "peak_inflight": self.peak_inflight,
                 "retries": self.previous_retries + self.retries, "http_counts": dict(self.http_counts),

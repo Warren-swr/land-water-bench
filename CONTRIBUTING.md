@@ -4,7 +4,9 @@ Open an issue for reference-policy or sampling changes before comparing new resu
 
 Install `.[dev,reference]`, run `python -m pytest -q` and `lwb verify`, and run the browser check when changing rendering or interaction. No paid API calls are required for tests or site builds.
 
-For a new result, use a distinct model alias and run ID, preserve the exact prompt, record API protocol/settings and any replay policy, and include every grid coordinate. Use `verify-run --seal` followed by `export-run`; never edit a frozen result or select only correct outputs. Explain any unresolved requests, output-cap replays, or altered budgets. API aliases are not proof of underlying model identity.
+The default result release includes both tasks. The browser acceptance entry point is `scripts/check_unified_browser.py`. Every new result package and reference must work without local archive paths.
+
+For a new result, use a distinct model alias and run ID, preserve the exact prompt, record API protocol/settings and any replay policy, and include every grid coordinate. For classification use `verify-run --seal` followed by `export-run`; for one full-grid terrain model use `export-terrain-run`. never edit a frozen result or select only correct outputs. Explain any unresolved requests, output-cap replays, or altered budgets. API aliases are not proof of underlying model identity.
 
 Keep credentials, gateway connection URLs, full provider envelopes, and local run directories out of commits. The allowlisted exporter intentionally publishes only final answer text and scoring metadata; review that text and metadata before publishing. Use environment-variable references in example configuration. Do not add paid evaluations to CI.
 

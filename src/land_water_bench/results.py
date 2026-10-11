@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from importlib.resources import files
 from pathlib import Path
 
-from .answers import VERSION as ANSWER_VERSION, parse_final_answer, reextract_record
+from .answers import VERSION as ANSWER_VERSION, SUPPORTED_VERSIONS, parse_final_answer, reextract_record
 from .config import ModelConfig, safe_name
 from .core import PROMPT, atomic_json, digest, make_dataset, make_grid, metrics
 from .replay import effective_records
@@ -96,7 +96,7 @@ def verify_results(directory: Path, *, check_seal=True) -> dict:
     require(data["dataset_sha256"] == digest(reference_bytes), "Result uses a different reference")
     require(data["truth"] == "".join(str(p["truth"]) for p in dataset["points"]), "Reference pixels changed")
     require(data["reference"] == dataset["reference"], "Reference metadata changed")
-    require(provenance["answer_parser"] == ANSWER_VERSION and provenance["score_policy"] == SCORE_VERSION,
+    require(provenance["answer_parser"] in SUPPORTED_VERSIONS and provenance["score_policy"] == SCORE_VERSION,
             "Unsupported parsing/scoring version")
     reference = read(directory / "reference.details.json")
     require(set(reference) == {str(i) for i in range(16200)}, "Reference detail grid is incomplete")
@@ -120,7 +120,7 @@ def verify_results(directory: Path, *, check_seal=True) -> dict:
             require(row["label"] in (0, 1) if row["status"] == "ok" else row["label"] is None, "Invalid prediction label")
             if row["status"] != "infra_error":
                 require(isinstance(row["text"], str), "Missing answer body")
-                parsed = None if i in incomplete else parse_final_answer(row["text"])["label"]
+                parsed = None if i in incomplete else parse_final_answer(row["text"], version=provenance["answer_parser"])["label"]
                 require(parsed == row["label"] and (parsed is not None) == (row["status"] == "ok"),
                         f"Answer extraction mismatch: {name}, sample {i}")
         require(all(i in records and records[i]["status"] == "invalid" for i in incomplete), "Invalid incomplete-response metadata")

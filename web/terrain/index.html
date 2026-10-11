@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terrain / Elevation · Pilot</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main>
+  <header><a href="https://warren-swr.github.io/land-water-bench/">LAND / WATER BENCH</a><span class="tag">EXPERIMENTAL · PILOT 01</span></header>
+  <section class="hero"><p class="eyebrow">COORDINATES IN. A WORLD COMES OUT.</p><h1>How high is<br>your world?</h1><p class="intro">一个经纬度。一个地表类型。一个高程。<br>看模型如何描绘陆地起伏与海洋深度。</p><p class="caption" id="context">正在读取已保存的结果…</p></section>
+  <section aria-labelledby="ranking-title"><div class="section-head"><h2 id="ranking-title">Terrain leaderboard</h2><span>类型正确 + 高程误差 ≤ 500 m · 降序</span></div><div class="table-wrap"><table><thead><tr><th>模型</th><th>联合 ±500 m</th><th>±100 m</th><th>±1,000 m</th><th>分类准确率</th><th>高程 MAE</th><th>无效 / 未决</th></tr></thead><tbody id="ranking"></tbody></table></div></section>
+  <section aria-labelledby="world-title"><div class="section-head"><h2 id="world-title">A model's terrain</h2><label>模型 <select id="model"></select></label></div><div class="worlds"><figure><figcaption>REFERENCE <span>ETOPO 2022</span></figcaption><canvas id="reference" aria-label="参考高程点云，可拖动旋转"></canvas></figure><figure><figcaption>PREDICTION <span id="selected-model"></span></figcaption><canvas id="prediction" aria-label="模型高程点云，可拖动旋转"></canvas></figure></div><div class="legend"><span class="water-dot">海床</span><span class="solid-dot">陆地</span><span class="error-dot">误差超过 500 m 或类型错误</span><span>拖动旋转 · 点击采样点检查</span></div><p class="caption">高程径向夸张约 160 倍，仅显示本次采样点；背景海陆点来自 GSHHG 2° 网格。没有对空白区域插值。</p></section>
+  <section class="analysis-grid"><figure><figcaption>HEIGHT AGREEMENT <span>参考 vs. 模型 · m</span></figcaption><canvas id="scatter" aria-label="参考高程与模型高程散点图，可点击检查"></canvas></figure><div class="inspector"><div class="section-head"><h2>Point inspector</h2><label class="sr-only" for="point">选择坐标</label><select id="point"></select></div><p id="point-values" aria-live="polite"></p><p id="point-error"></p><details><summary>题目</summary><pre id="prompt"></pre></details><details open><summary>模型原始回答</summary><pre id="answer"></pre></details></div></section>
+  <section><div class="section-head"><h2>Where errors happen</h2><span>各档联合准确率 · ±500 m</span></div><div id="strata" class="strata"></div></section>
+  <footer><p>512 个坐标 · 陆地 / 海洋各 256 · 八档高程等量抽样 · 单次直接 API 调用 · 无 Agent、工具或地图输入。</p><p>这是分层试验集，不代表全球面积分布。无效回答计错；未决请求从分子和分母剔除并保留数量。MAE 只统计可解析的数值，包含类型判断错误的回答。参考是固定版本栅格，不是无误差的物理真值。</p><p><a href="RESULTS.md">实验报告与评分定义</a> · <a href="data.json" download>完整展示数据</a> · <a href="https://www.ncei.noaa.gov/products/etopo-global-relief-model">NOAA ETOPO 2022</a> · <a href="THIRD_PARTY_NOTICES.md">数据许可</a></p></footer>
+</main><script src="app.js"></script>
+</body></html>

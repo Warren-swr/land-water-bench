@@ -1,0 +1,61 @@
+'use strict';
+(() => {
+  const $ = id => document.getElementById(id);
+  const pct = n => n == null ? '—' : (100 * n).toFixed(1) + '%';
+  const meters = n => n == null ? '—' : Math.round(n).toLocaleString('en-US') + ' m';
+  const colors = {solid:'#bb691b',water:'#416ddd',error:'#d04d75',muted:'#8d96a9',grid:'#dce0eb',ink:'#202232'};
+  const labels = {running:'评测中',starting:'启动中',probing:'接口探测',complete:'已校验',verifying:'校验中',verification_failed:'校验异常',incomplete:'中断 / 未完成',failed:'运行异常',stopped:'已停止'};
+  const strataNames = {solid_low:['低地','< 200 m'],solid_mid:['丘陵 / 中低地','200–1,000 m'],solid_high:['高地','1,000–2,500 m'],solid_alpine:['高山 / 高原 / 冰原','≥ 2,500 m'],water_shelf:['浅海','水深 < 500 m'],water_slope:['中等水深','500–2,500 m'],water_deep:['深海','2,500–4,500 m'],water_abyssal:['更深海域','≥ 4,500 m']};
+  let metadata, reference, model = null, records = null, selected = 6596, yaw = -100, pitch = 20, hits = {}, redraw = false, loading = 0;
+  const cache = new Map();
+  async function json(path) { const r = await fetch(path, {cache:'no-store'}); if (!r.ok) throw new Error('结果暂不可用：' + r.status); return r.json(); }
+  function canvas(id) { const c=$(id),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.font='11px Arial';return {ctx,w,h}; }
+  function project(lat,lon,r=1) { const a=(lon+yaw)*Math.PI/180,b=lat*Math.PI/180,t=pitch*Math.PI/180,x=Math.cos(b)*Math.sin(a),y=Math.sin(b),z=Math.cos(b)*Math.cos(a);return [r*x,r*(y*Math.cos(t)-z*Math.sin(t)),r*(y*Math.sin(t)+z*Math.cos(t))]; }
+  function globe(id,predicted) {
+    const {ctx,w,h}=canvas(id),cx=w/2,cy=h/2,R=Math.min(w*.39,h*.40);hits[id]=[];
+    ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.fillStyle='#eef1f8';ctx.fill();ctx.strokeStyle=colors.grid;ctx.lineWidth=.7;
+    for(let lat=-60;lat<=60;lat+=30){ctx.beginPath();let on=false;for(let lon=-180;lon<=180;lon+=3){const [x,y,z]=project(lat,lon);if(z>=0){if(on)ctx.lineTo(cx+x*R,cy-y*R);else ctx.moveTo(cx+x*R,cy-y*R);on=true;}else on=false;}ctx.stroke();}
+    for(let lon=-180;lon<180;lon+=30){ctx.beginPath();let on=false;for(let lat=-90;lat<=90;lat+=3){const [x,y,z]=project(lat,lon);if(z>=0){if(on)ctx.lineTo(cx+x*R,cy-y*R);else ctx.moveTo(cx+x*R,cy-y*R);on=true;}else on=false;}ctx.stroke();}
+    ctx.fillStyle='#c6cddd';for(const p of reference.points){if(!p.truth)continue;const [x,y,z]=project(p.lat,p.lon);if(z>0){ctx.beginPath();ctx.arc(cx+x*R,cy-y*R,Math.max(.6,R*.008),0,Math.PI*2);ctx.fill();}}
+    if(predicted&&!records){ctx.fillStyle=colors.muted;ctx.textAlign='center';ctx.fillText('等待模型完成并通过校验',cx,cy);return;}
+    const dots=[];
+    for(const p of reference.points){const row=records?.[p.id],e=predicted?row?.prediction?.elevation_m:p.elevation_m;if(e==null)continue;const [x,y,z]=project(p.lat,p.lon,1+Math.max(-10000,Math.min(10000,e))/40000);if(z<=0)continue;const [sx,sy]=project(p.lat,p.lon);const wrong=predicted&&(row.label!==p.truth||(p.elevation_m!=null&&Math.abs(e-p.elevation_m)>500));dots.push({id:p.id,x:cx+x*R,y:cy-y*R,z,sx:cx+sx*R,sy:cy-sy*R,color:wrong?colors.error:(predicted?row.label:p.truth)?colors.solid:colors.water});}
+    dots.sort((a,b)=>a.z-b.z);
+    for(const d of dots){if(d.id===selected){ctx.strokeStyle=d.color;ctx.globalAlpha=.45;ctx.beginPath();ctx.moveTo(d.sx,d.sy);ctx.lineTo(d.x,d.y);ctx.stroke();ctx.globalAlpha=1;}ctx.fillStyle=d.color;ctx.beginPath();ctx.arc(d.x,d.y,d.id===selected?4:1.1,0,Math.PI*2);ctx.fill();hits[id].push(d);}
+    const chosen=dots.find(d=>d.id===selected);if(chosen){ctx.strokeStyle=colors.ink;ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(chosen.x,chosen.y,7,0,Math.PI*2);ctx.stroke();}
+  }
+  function scatter() {
+    const {ctx,w,h}=canvas('scatter'),left=64,right=w-20,top=24,bottom=h-42;hits.scatter=[];
+    let lo=-10000,hi=8000;const data=[];
+    if(records)for(const p of reference.points){const r=records[p.id];if(p.elevation_m==null||r?.status!=='ok')continue;const e=r.prediction.elevation_m;lo=Math.min(lo,p.elevation_m,e);hi=Math.max(hi,p.elevation_m,e);data.push([p,r,e]);}
+    const span=hi-lo,step=10**Math.floor(Math.log10(span/4)),tick=step*(span/4/step>5?10:span/4/step>2?5:2);
+    lo=Math.floor(lo/tick)*tick;hi=Math.ceil(hi/tick)*tick;
+    const x=v=>left+(v-lo)/(hi-lo)*(right-left),y=v=>bottom-(v-lo)/(hi-lo)*(bottom-top),fmt=v=>Math.abs(v)>=1e6?v.toExponential(0):Math.abs(v)>=1000?(v/1000)+'k':String(v);
+    ctx.strokeStyle=colors.grid;ctx.fillStyle=colors.muted;
+    for(let t=lo;t<=hi+tick*.01;t+=tick){ctx.beginPath();ctx.moveTo(x(t),top);ctx.lineTo(x(t),bottom);ctx.moveTo(left,y(t));ctx.lineTo(right,y(t));ctx.stroke();ctx.textAlign='center';ctx.fillText(fmt(t),x(t),bottom+18);ctx.textAlign='right';ctx.fillText(fmt(t),left-8,y(t)+4);}
+    ctx.strokeStyle=colors.muted;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x(lo),y(lo));ctx.lineTo(x(hi),y(hi));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=colors.ink;ctx.textAlign='left';ctx.fillText('模型高程（m）',left,12);ctx.textAlign='right';ctx.fillText('参考高程（m）',right,h-4);
+    for(const [p,r,e] of data){const px=x(p.elevation_m),py=y(e);ctx.fillStyle=Math.abs(e-p.elevation_m)>500||r.label!==p.truth?colors.error:colors.water;ctx.globalAlpha=p.id===selected?1:.22;ctx.beginPath();ctx.arc(px,py,p.id===selected?4:1.5,0,Math.PI*2);ctx.fill();hits.scatter.push({id:p.id,x:px,y:py});}ctx.globalAlpha=1;
+  }
+  function explainReason(reason) { return (reason||'').split(';').map(s=>({unsupported_lake:'湖底高程参考未验收',unsupported_river_lake:'河湖参考未验收',unsupported_island_in_lake:'嵌套岛屿参考未验收',unsupported_floating_ice_shelf:'冰架下海床参考未验收',classification_reference_disagreement_or_boundary:'参考分类冲突 / 边界点',ocean_bed_vs_surface_height_conflict:'海洋类型与高程冲突'}[s]||s)).join('；'); }
+  function details() {
+    const p=reference.points[selected],r=records?.[selected],kind=p.truth?'Solid':'Water';
+    $('point-values').textContent=`参考 ${kind} · ${p.elevation_m==null?'高程不可评分':meters(p.elevation_m)} → 预测 ${r?.prediction?.type||r?.status||'待完成'} · ${meters(r?.prediction?.elevation_m)}`;
+    $('point-error').textContent=`#${selected} · ${p.lat}°, ${p.lon}° · `+(p.elevation_m==null?explainReason(p.height_reference_reason):r?.prediction?`绝对误差 ${meters(Math.abs(r.prediction.elevation_m-p.elevation_m))}`:'等待预测');
+    $('prompt').textContent=reference.prompt_template.replace('{lat:.1f}',p.lat.toFixed(1)).replace('{lon:.1f}',p.lon.toFixed(1));$('answer').textContent=r?.text??(r?.status==='infra_error'?'请求未决；无可用模型回答。':'等待该模型完成并通过校验。');$('point').value=String(selected);$('previous').disabled=selected===0;$('next').disabled=selected===reference.points.length-1;
+  }
+  function draw() { if(!reference)return;globe('reference',false);globe('prediction',true);scatter();details(); }
+  function queueDraw() { if(redraw)return;redraw=true;requestAnimationFrame(()=>{redraw=false;draw();}); }
+  function updateStrata() { $('strata').replaceChildren();for(const [key,[name,range]] of Object.entries(strataNames)){const s=model?.metrics?.by_stratum?.[key],value=s?.joint_accuracy?.['500'],d=document.createElement('div');d.innerHTML=`<div class="stratum-name">${name}</div><div class="stratum-range">${range} · ${s?.expected??'—'} 点</div><div class="bar-track"><div class="bar" style="width:${(value||0)*100}%"></div></div><div class="bar-value">${pct(value)}</div>`;$('strata').append(d);} }
+  async function setModel(name) { const token=++loading;model=metadata.models.find(m=>m.name===name&&m.verified)||null;records=null;$('prediction').setAttribute('aria-busy','true');$('selected-model').textContent=model?model.name:'等待模型完成校验';updateStrata();queueDraw();if(!model){$('prediction').setAttribute('aria-busy','false');return;}const chosen=model;try{let rows=cache.get(chosen.name);if(!rows){rows=await json(chosen.details_url);cache.set(chosen.name,rows);if(cache.size>3)cache.delete(cache.keys().next().value);}if(token!==loading)return;records=rows;queueDraw();$('prediction').setAttribute('aria-busy','false');}catch(error){$('prediction').setAttribute('aria-busy','false');$('answer').textContent=error.message;} }
+  function paintMetadata() {
+    $('ranking').replaceChildren();let rank=0;
+    for(const m of metadata.models){const s=m.metrics||{},j=m.verified?s.joint_accuracy:{},tr=document.createElement('tr');if(!m.verified)tr.className='row-pending';const values=[m.name,m.verified?pct(j?.['500']):`${(m.completed||0).toLocaleString()} / 16,200`,pct(j?.['100']),pct(j?.['1000']),pct(m.verified?s.classification_accuracy:null),meters(m.verified?s.elevation_mae_m:null),`${s.invalid||0} / ${s.infra_errors||0}`,pct(s.coverage)];values.forEach((value,index)=>{const td=document.createElement('td');td.textContent=value;if(index===0){const number=document.createElement('span');number.className='rank';number.textContent=m.verified?String(++rank).padStart(2,'0'):'·';td.prepend(number);const status=document.createElement('span');status.className='status';status.textContent=labels[m.status]||m.status;td.append(status);}tr.append(td);});$('ranking').append(tr);}
+    const fraction=metadata.expected?metadata.completed/metadata.expected:0;$('progress').style.width=(fraction*100)+'%';document.querySelector('[role=progressbar]').setAttribute('aria-valuenow',String(Math.round(fraction*100)));$('completion').textContent=`${metadata.completed.toLocaleString()} / ${metadata.expected.toLocaleString()} 已处理 · ${metadata.verified_models} / ${metadata.models.length} 个展示模型已校验`;$('updated').textContent=(metadata.state==='complete'?'全部完成 · ':'自动更新 · ')+new Date(metadata.updated_at).toLocaleTimeString('zh-CN',{hour12:false});$('reference-coverage').textContent=`每模型完整 16,200 点 · 高程可评分 ${metadata.height_scorable.toLocaleString()} 点 · ${metadata.height_unscorable} 点仅参与分类评分`;$('unavailable').textContent=metadata.unavailable.map(m=>`${m.name}：${m.reason}，未加入排名。`).join(' ');
+    const current=model?.name,available=metadata.models.filter(m=>m.verified);$('model').replaceChildren();if(!available.length)$('model').add(new Option('等待首个模型完成',''));for(const m of available)$('model').add(new Option(m.name,m.name));$('model').disabled=!available.length;const next=available.find(m=>m.name===current)?.name||available[0]?.name;if(next){$('model').value=next;if(next!==current)setModel(next);else {model=metadata.models.find(m=>m.name===current);updateStrata();}}else {updateStrata();queueDraw();}
+  }
+  function pick(id,event){const r=$(id).getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;let best=null,dist=14;for(const p of hits[id]||[]){const d=Math.hypot(p.x-x,p.y-y);if(d<dist){best=p;dist=d;}}if(best){selected=best.id;queueDraw();}}
+  for(const id of ['reference','prediction']){let first,last,moved;$(id).addEventListener('pointerdown',e=>{first=last={x:e.clientX,y:e.clientY};moved=false;$(id).setPointerCapture(e.pointerId);});$(id).addEventListener('pointermove',e=>{if(!last)return;moved=moved||Math.hypot(e.clientX-first.x,e.clientY-first.y)>4;yaw+=(e.clientX-last.x)*.45;pitch=Math.max(-80,Math.min(80,pitch-(e.clientY-last.y)*.35));last={x:e.clientX,y:e.clientY};queueDraw();});$(id).addEventListener('pointerup',e=>{if(!moved)pick(id,e);last=null;});$(id).addEventListener('pointercancel',()=>last=null);}
+  $('scatter').addEventListener('click',e=>pick('scatter',e));$('model').addEventListener('change',()=>setModel($('model').value));$('point').addEventListener('change',()=>{selected=Math.max(0,Math.min(16199,Math.round(Number($('point').value)||0)));const p=reference.points[selected];yaw=-p.lon;pitch=Math.max(-80,Math.min(80,p.lat));queueDraw();});$('previous').addEventListener('click',()=>{selected=Math.max(0,selected-1);queueDraw();});$('next').addEventListener('click',()=>{selected=Math.min(16199,selected+1);queueDraw();});
+  async function refresh(){try{metadata=await json('data.json');paintMetadata();}catch(error){$('updated').textContent=error.message;}}
+  Promise.all([json('data.json'),json('reference.details.json')]).then(([m,r])=>{metadata=m;reference=r;if(m.dataset_sha256!==r.dataset_sha256)throw new Error('参考版本不一致');paintMetadata();queueDraw();new ResizeObserver(queueDraw).observe($('reference'));new ResizeObserver(queueDraw).observe($('scatter'));setInterval(refresh,30000);}).catch(error=>{$('completion').textContent=error.message;});
+})();

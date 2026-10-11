@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "land-water-bench"
-version = "1.0.0"
-description = "Direct-model land/water classification on a reproducible global coordinate grid"
+version = "2.0.0"
+description = "Direct-model surface classification and terrain elevation on a frozen global grid"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT AND LGPL-3.0-only"

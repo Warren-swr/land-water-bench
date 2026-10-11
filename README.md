@@ -1,30 +1,34 @@
-# Land / Water Bench
+# Land / Water / Elevation Bench
 
-**One coordinate. One word. A model's map of the world.**
+One coordinate. Surface type and height. A model’s map of the world.
 
 [![Checks](https://github.com/Warren-swr/land-water-bench/actions/workflows/checks.yml/badge.svg)](https://github.com/Warren-swr/land-water-bench/actions/workflows/checks.yml)
 [![Pages](https://github.com/Warren-swr/land-water-bench/actions/workflows/pages.yml/badge.svg)](https://github.com/Warren-swr/land-water-bench/actions/workflows/pages.yml)
 [![Code: MIT](https://img.shields.io/badge/code-MIT-blue)](LICENSE)
 
-[Interactive leaderboard](https://warren-swr.github.io/land-water-bench/) · [Results](results/2026-10-10/RESULTS.md) · [Protocol](docs/PROTOCOL.md) · [中文说明](docs/README.zh-CN.md)
+[Interactive leaderboard](https://warren-swr.github.io/land-water-bench/) · [Latest results](results/2026-10-11/RESULTS.md) · [Terrain protocol](docs/TERRAIN-GLOBAL.md) · [中文说明](docs/README.zh-CN.md)
 
-A reproducible, coordinate-only benchmark: ask a language model whether each of **16,200 points** on a global 2° grid is land or water. Each point is an independent API request. No agent runtime, tools, browsing, images, map context, or conversation history are supplied.
+Predict Solid/Water and ground or seabed elevation from a single latitude and longitude. The main leaderboard requires both the correct surface type and elevation within ±500 m, weighted by latitude. A separate column reports accuracy from the independently run classification-only task.
 
-Inspired by [Celeste's experiment](https://x.com/celestepoasts/status/2103232383139057950). This is an independent reproduction with an explicit sampling grid and geographic reference; scores are not directly comparable to the original post.
+Both tasks use the same **16,200-point global grid**. Each coordinate is an independent direct model API request, with no Agent runtime, tools, browsing, images, map context, reference answers, or conversation history.
 
-![The light-themed leaderboard and geographic comparison](docs/preview.png)
+Inspired by [Celeste’s experiment](https://x.com/celestepoasts/status/2103232383139057950). This is an independent reproduction and extension; scores are not directly comparable to the original post.
 
-## What's included
+![The unified leaderboard and terrain explorer](docs/preview.png)
 
-- A Python runner for **Responses** and **Messages** API-compatible endpoints, with per-model concurrency, bounded retries, timeouts, checkpointing, and resumable evidence.
-- A frozen **GSHHG 2.3.7** reference, checksum-pinned source downloads, and an independent geometric cross-check.
-- **12 model result sets / 194,400 final responses**, including individual answer bodies, invalid responses, unresolved requests, and exact scoring metadata.
-- A static, dependency-free leaderboard: interactive globe, model filters, side-by-side maps, error/difference views, per-coordinate answers, and CSV download.
-- Automated tests, offline score verification, and GitHub Pages deployment. CI and site builds make **zero model API requests**.
+## Included in this clone
 
-## Quick start
+- **12 models × 2 tasks × 16,200 coordinates = 388,800 records**, including final answer text, predictions, invalid and unresolved states, settings, completion evidence, and frozen checksums.
+- Frozen **GSHHG 2.3.7** classification and **ETOPO 2022 / EGM2008** elevation references. The terrain input includes all prompts, four native cell values per point, and the predeclared height mask.
+- Direct API runners for Responses and Messages protocols, per-model concurrency, bounded retries, checkpointing, and resumable runs.
+- A light-themed unified leaderboard with interactive globes, elevation scatter plots, per-stratum scores, and both tasks’ answers for each coordinate.
+- Offline verification, static-site building, tests, and GitHub Pages deployment. No external workspace paths, private data mounts, or symlinks are required.
 
-Python 3.11+ on Linux or macOS. The runner uses POSIX file locks and signal handling; Windows users can use WSL. Viewing the published site requires only a browser.
+The latest snapshot is **2026-10-11**, after timeout recovery and answer-extraction corrections. It contains 471 invalid / 723 unresolved terrain records and 40 invalid / 2 unresolved classification records. Seed 0902 and 0915 are displayed as one model, as explicitly confirmed, while retaining each task’s original source identity.
+
+## Clone and view
+
+Python 3.11+ on Linux or macOS; Windows can use WSL.
 
 ```bash
 git clone https://github.com/Warren-swr/land-water-bench.git
@@ -38,90 +42,86 @@ lwb build
 lwb serve --directory dist --port 8732
 ```
 
-Open <http://localhost:8732>. `lwb build` refuses an existing output directory; use a new `--output` directory or remove only your previous generated `dist/` before rebuilding. No API key or geographic-source download is needed to verify the included results or build the site.
+Open <http://localhost:8732>. The default commands verify and display **both latest tasks**. No API key or geographic-source download is required. `lwb build` requires a fresh output directory; for another build use `--output dist-next`.
 
-## Run a model
-
-1. Copy [configs/models.example.yaml](configs/models.example.yaml) to the ignored `configs/local.yaml`.
-2. Set the API key, **full endpoint URL**, and actual available model ID through the environment variables named in that file. The program does not load `.env` files automatically.
-3. Start with a small smoke run, then use a **different run directory** for the full grid.
+To inspect a classification-only or historical snapshot:
 
 ```bash
-# After configuring LWB_RESPONSES_URL, LWB_RESPONSES_API_KEY, and LWB_RESPONSES_MODEL:
+lwb build --results results/2026-10-11/classification --output dist-classification
+lwb verify --results results/2026-10-10
+```
+
+## Run your own model
+
+Copy `configs/models.example.yaml` to the ignored `configs/local.yaml`. Set the endpoint URL, API-key environment variable, and model ID indicated in that configuration. Both wire protocols are supported; use names and reasoning settings available to your account. Environment files are not loaded automatically.
+
+```bash
+# Main task: a small smoke run using the bundled global reference.
+lwb run-terrain --config configs/local.yaml --models responses-model \
+  --run-dir runs/terrain-smoke --limit 8 --concurrency 2 --max-retries 3
+
+# Main task: every coordinate; a new run directory is required.
+lwb run-terrain --config configs/local.yaml --models responses-model \
+  --run-dir runs/terrain-full --concurrency 512 --max-retries 1000
+
+# Verify and display your completed full-grid terrain run.
+lwb export-terrain-run --run-dir runs/terrain-full --output dist-my-terrain
+
+# Independent classification-only task.
 lwb run --config configs/local.yaml --models responses-model \
-  --run-dir runs/smoke --limit 8 --concurrency 2 --max-retries 3
-
-# Full benchmark: 512 simultaneous requests PER MODEL; up to 1,000 retries per point.
-lwb run --config configs/local.yaml --models responses-model messages-model \
-  --run-dir runs/experiment-001 --concurrency 512 --max-retries 1000
+  --run-dir runs/classification-full --concurrency 512 --max-retries 1000
 ```
 
-Two models at `--concurrency 512` may issue **1,024 simultaneous requests** in total. Retry backoff occupies that model's worker slots. These limits can generate substantial API usage; use settings appropriate for your account. The default output cap is 65,536 tokens per request, configurable per model; providers may reject unsupported caps. Reasoning/thinking settings are forwarded exactly as configured, and must also be supported by the endpoint.
+Concurrency is **per model**: two models at 512 may issue up to 1,024 simultaneous requests. The output cap defaults to 65,536 tokens; support depends on the endpoint. Terrain reads initially time out at 300 seconds, then 600 seconds, with two timeout retries by default. General rate-limit retries are bounded separately. The saved recovery batches used up to eight total timeout attempts.
 
-Run the **same command and configuration** to resume an interrupted, unsealed run. Previous terminal answers and per-point attempt counts are retained. `Ctrl+C`, `SIGTERM`, or creating `RUN_DIR/STOP_REQUESTED.json` stops further scheduling; current requests finish within their configured timeout. Remove the stop file before an intentional resume.
+Re-run the same command to resume an unsealed run. Attempt budgets are retained. `Ctrl+C`, `SIGTERM`, or `RUN_DIR/STOP_REQUESTED.json` stops scheduling. Completed wrong or invalid answers are not automatically resampled.
 
-```bash
-lwb verify-run --run-dir runs/experiment-001 --seal
-lwb export-run --run-dir runs/experiment-001 --output results/experiment-001
-lwb build --results results/experiment-001 --output dist-experiment
-```
+[Runner configuration and classification export](docs/RUNNING.md) · [Terrain running, collection export, and reference rebuilding](docs/TERRAIN-GLOBAL.md) · [Recovery](docs/RECOVERY.md) · [Versioned re-extraction](docs/REEXTRACTION.md)
 
-To append new, distinctly named models to the bundled leaderboard, pass `--base results/2026-10-10` to `export-run`. Smoke runs and pending runs cannot be published as complete leaderboard entries. Export uses an allowlist of final-answer fields; inspect answer content and model aliases before publishing your own data. Raw run directories are git-ignored and are never deployed to Pages.
+## Scores and limits
 
-[Runner behavior and selective truncation replay →](docs/RUNNING.md)
+The primary metric is area-weighted joint accuracy: type correct **and** absolute elevation error ≤500 m. Only 15,928 points have an accepted height reference; the other 272 retain their classification results. ±100 m and ±1,000 m scores, MAE, and terrain-task classification accuracy are available in model details.
 
-## Reading the results
+- Invalid responses remain in the denominator and count as wrong. Actual format errors, empty answers and output truncation are still invalid.
+- Unresolved API requests, including content filtering returned with HTTP 200, are excluded from numerator and denominator. Counts and coverage remain visible.
+- Explanations, formula braces, identical repeated JSON and explicit final corrections are supported by the versioned parser. Thinking/reasoning blocks are not used as answers.
+- Grounded ice is Solid with ice-surface height. Water includes oceans, lakes and floating ice shelves, with seabed/lakebed height rather than water-surface height.
+- Static references have source and grid limitations. Small score gaps, unmatched reasoning budgets, and single samples do not establish stable model superiority.
 
-The main metric weights each grid center by `cos(latitude)`:
-
-```text
-accuracy = sum(weight of correct answers) / sum(weight of scored coordinates)
-```
-
-- **Invalid**: a completed response without an unambiguous extractable answer, or an output-truncated response. Included in the denominator and scored wrong.
-- **Unresolved**: an API failure without a usable answer. Excluded from that model's numerator and denominator, with the excluded count retained.
-- **Pending**: no terminal result yet. No final leaderboard score is published.
-
-In the bundled snapshot, 3 Kimi requests are unresolved after recovery attempts; 320 answers across the models remain invalid. Land/water recall columns are conditional on valid labels and should be read alongside the primary metric.
-
-The geographic reference labels lakes and floating ice shelves **Water**, and land, islands in lakes, and grounded ice **Land**. GSHHG and Natural Earth disagree on 54 coordinates; those coordinates remain scored and are marked in the inspector. The static reference is not absolute ground truth.
-
-Model names are **experiment aliases reported by the configured gateways**, not independently verified provider identities or claims that these names are publicly available. The included runs used different reasoning settings and output caps, with selective replay of output-cap truncations and recovery of some failed requests. They are not matched-compute or repeated-sampling comparisons. See [result provenance](results/2026-10-10/provenance.json) and the [protocol](docs/PROTOCOL.md).
+Model names are gateway experiment aliases, not independently attested provider identities or promises of publicly available API names. The snapshot preserves different historical budgets and recorded recovery/replay policies. [Classification protocol and historical provenance](docs/PROTOCOL.md).
 
 ## Repository layout
 
 ```text
-src/land_water_bench/    Runner, extraction, scoring, validation, CLI
-  data/                 Frozen reference, policy, source checksums
-configs/                Environment-based example connections
-results/2026-10-10/      Public frozen results, provenance, checksums
-web/                    HTML, CSS, JavaScript, and licensed local font
-scripts/check_browser.py  Full interactive and responsive browser checks
-tests/                  Offline unit and mock-API integration tests
-docs/                   Protocol, running, reference, and Chinese guide
-.github/workflows/      Checks and GitHub Pages deployment
+src/land_water_bench/       Runners, parsers, scoring, reference builders, CLI
+  data/                    Frozen classification and full terrain inputs
+results/2026-10-11/         Current terrain/ and classification/ result packages
+results/2026-10-10/         Preserved historical classification release
+web/unified/               Current unified page source
+web/                       Classification page, fonts and license notices
+configs/                   Environment-variable model configuration examples
+scripts/                   Publication and browser checks
+tests/                     Offline unit and mock-API integration checks
+docs/                      Protocols, provenance and usage
+.github/workflows/         Tests and GitHub Pages deployment
 ```
 
-## Development and verification
+Private service connections, credentials, full provider envelopes and operational logs are not published. The bundled answer bodies, completion metadata and references are sufficient to verify every displayed score offline; they do not attest the original provider identity. Historical raw evidence remains archived by the experiment owner.
+
+## Development and deployment
 
 ```bash
 python -m pip install -e '.[dev,reference]'
 python -m pytest -q
 lwb verify
-python -m build
-python -m playwright install chromium
+python -m build --outdir /tmp/land-water-packages
 lwb build --output dist-check
+python -m playwright install chromium
 lwb serve --directory dist-check --port 8733
 # In another terminal:
-python scripts/check_browser.py --url http://localhost:8733/ --output runs/browser-check
+python scripts/check_unified_browser.py --url http://localhost:8733/ --output runs/browser-check
 ```
 
-Tests use mock API transports: they do not consume model credits. The browser check covers sorting, filters, answer dialogs, downloadable scores, all map pixels in three modes, animation controls, and mobile layouts. [Reference rebuilding](docs/REFERENCE.md) is optional and requires the larger geographic downloads.
+Tests use mock APIs. CI verifies the bundled references, extraction and scores, builds the unified site, and tests model switching, sorting, answers, globe interaction and mobile widths. GitHub Pages builds the same site from the repository and publishes only `dist/`; it never needs model credentials or local run archives. For a fork, enable **Settings → Pages → GitHub Actions** and update the repository links.
 
-## Publishing
-
-The [Pages workflow](.github/workflows/pages.yml) verifies the saved results, builds `dist/`, and deploys it with GitHub's official Pages actions. It does not deploy the repository root or use API credentials. In a fork, enable **Settings → Pages → GitHub Actions** and update the repository links in `web/index.html` and this README. Runtime asset URLs are relative and work under a repository subpath.
-
-## License and attribution
-
-Original code and documentation: [MIT](LICENSE). GSHHG-derived reference labels and their copies in result/site files retain [LGPL-3.0](licenses/LGPL-3.0.txt) notices; the MIT license does not relicense upstream data. Natural Earth comparison data are public domain. Space Grotesk is distributed under the SIL Open Font License. Saved model answer text is provided as experimental evidence; no claim is made to override any applicable third-party terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Original code: MIT. GSHHG-derived labels retain LGPL-3.0 notices, the font retains its OFL license, and upstream data and model responses retain applicable terms. [Third-party notices](THIRD_PARTY_NOTICES.md).

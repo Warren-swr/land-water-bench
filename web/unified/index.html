@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Land / Water / Elevation · Benchmark</title>
+  <meta name="description" content="16,200 个全球坐标，比较模型的固体、水体与高程预测。联合任务主榜与独立分类任务在同一页面呈现。">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">◒</span> LAND / WATER BENCH</a>
+    <nav aria-label="页面导航"><a href="#leaderboard">Leaderboard</a><a href="#explore">Explore</a><a href="#method">Method</a></nav>
+  </header>
+
+  <section class="hero" aria-labelledby="title">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="live-dot"></span> GLOBAL GEOGRAPHIC INTELLIGENCE</p>
+      <h1 id="title">Beyond the<br><em>surface.</em></h1>
+      <p class="intro">不止分清陆与海，也要知道山有多高、海有多深。<br>给定经纬度，同时预测固体 / 水体与地表、海床高程。</p>
+      <div class="hero-tags"><span>Coordinate in</span><i aria-hidden="true">→</i><span>Solid / Water + Elevation out</span></div>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <svg viewBox="0 0 460 340" fill="none">
+        <defs><linearGradient id="land-fill" x1="230" y1="50" x2="230" y2="230" gradientUnits="userSpaceOnUse"><stop stop-color="#c9bcf7" stop-opacity=".8"/><stop offset="1" stop-color="#e8e0fc" stop-opacity=".15"/></linearGradient><linearGradient id="sea-fill" x1="230" y1="210" x2="230" y2="315" gradientUnits="userSpaceOnUse"><stop stop-color="#bbd5fb" stop-opacity=".1"/><stop offset="1" stop-color="#97b9ef" stop-opacity=".8"/></linearGradient></defs>
+        <ellipse cx="239" cy="173" rx="154" ry="139" stroke="#d9dbe8" stroke-dasharray="3 6"/>
+        <ellipse cx="239" cy="173" rx="87" ry="139" stroke="#e0e2ee"/>
+        <path d="M39 212H425M73 156H406M95 101H378M111 268H366M135 45V298M237 19V325M339 45V298" stroke="#e2e5ef"/>
+        <path d="M39 212L80 205L114 164L141 172L186 106L211 128L248 61L273 114L291 106L331 172L362 185L393 205L425 212Z" fill="url(#land-fill)" stroke="#8270c6" stroke-width="1.5"/>
+        <path d="M39 212L91 226L127 250L165 258L197 297L228 280L266 306L300 262L329 272L364 236L403 224L425 212Z" fill="url(#sea-fill)" stroke="#628dda" stroke-width="1.5"/>
+        <path d="M80 205L123 185L158 194L200 148L226 166L249 115L277 165L307 160L350 199L393 205M110 210L153 197L190 204L220 184L248 161L278 190L316 195L365 210" stroke="#a296ce" stroke-opacity=".6"/>
+        <path d="M91 226L139 230L190 263L231 254L265 278L304 239L344 245L403 224M124 222L170 240L225 231L272 251L317 224L365 225" stroke="#7a9bd0" stroke-opacity=".6"/>
+        <path d="M248 61V212M266 212V306" stroke="#7481a4" stroke-dasharray="3 4"/>
+        <circle cx="248" cy="61" r="4" fill="#7c60c4"/><circle cx="266" cy="306" r="4" fill="#416ddd"/>
+        <path d="M253 60H290M272 306H310" stroke="#8c93ad"/>
+        <text x="297" y="64" fill="#6f589f" font-size="12">+ elevation</text><text x="317" y="310" fill="#416ddd" font-size="12">− depth</text><text x="40" y="199" fill="#81889b" font-size="10">SEA LEVEL / 0 m</text>
+      </svg>
+      <span class="art-note">TERRAIN PROFILE · ILLUSTRATION</span>
+    </div>
+  </section>
+
+  <section class="stats" aria-label="评测范围">
+    <div><span class="stat-label">全球采样点</span><strong>16,200<small> / model</small></strong></div>
+    <div><span class="stat-label">分类 + 高程</span><strong id="terrain-count">—<small> models</small></strong></div>
+    <div><span class="stat-label">独立分类任务</span><strong id="classification-count">—<small> models</small></strong></div>
+    <div><span class="stat-label">联合准确率容差</span><strong>±500<small> m</small></strong></div>
+  </section>
+
+  <section id="leaderboard" class="leaderboard">
+    <div class="section-head"><div><p class="eyebrow">01 / THE LEADERBOARD</p><h2>One world. Two tasks.</h2></div><span class="section-note" id="load-status" aria-live="polite">读取已完成结果…</span></div>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="模型榜单，窄屏可横向滚动">
+      <table>
+        <thead><tr><th scope="col">模型</th><th scope="col" class="primary-col">联合准确率<span>分类正确 + 高程 ±500 m</span></th><th scope="col">高程 MAE<span>联合任务 · 越低越好</span></th><th scope="col" class="classification-col">仅分类准确率<span>独立分类任务</span></th><th scope="col">覆盖率<span>联合任务</span></th></tr></thead>
+        <tbody id="ranking"></tbody>
+      </table>
+    </div>
+    <p class="caption scroll-hint">左右滑动榜单，查看全部指标 →</p>
+    <p class="caption">默认按联合准确率降序 · 全部准确率按地表面积加权 · “仅分类”列来自单独回答固体 / 水体的历史任务。</p>
+    <p class="caption" id="version-note"></p>
+  </section>
+
+  <section id="explore">
+    <div class="section-head"><div><p class="eyebrow">02 / THE PREDICTED PLANET</p><h2>A model’s terrain.</h2></div><label>联合任务模型 <select id="model" disabled></select></label></div>
+    <div class="model-summary" id="model-summary" aria-live="polite"></div>
+    <div class="worlds">
+      <figure><figcaption><span class="panel-label">REFERENCE</span><span>ETOPO 2022</span></figcaption><canvas id="reference" aria-label="全球参考高程，可拖动旋转"></canvas></figure>
+      <figure><figcaption><span class="panel-label">PREDICTION</span><span id="selected-model">读取模型…</span></figcaption><canvas id="prediction" aria-label="模型预测高程，可拖动旋转" aria-busy="true"></canvas></figure>
+    </div>
+    <div class="legend"><span class="water-dot">海床</span><span class="solid-dot">陆地 / 接地冰</span><span class="error-dot">联合判断错误</span><span>拖动旋转 · 点击采样点</span></div>
+    <p class="caption">高程径向夸张约 160 倍，显示范围 ±10,000 m。实际采样点直接绘制，未做地形插值；评分使用原始数值。</p>
+  </section>
+
+  <section class="analysis-grid">
+    <figure class="scatter-panel"><figcaption><span class="panel-label">HEIGHT AGREEMENT</span><span>参考 vs. 模型 · m</span></figcaption><canvas id="scatter" aria-label="参考高程与模型预测的散点图"></canvas></figure>
+    <div class="inspector">
+      <div class="section-head"><h2>Inspect a coordinate.</h2><div class="point-nav"><button id="previous" aria-label="上一个坐标">←</button><label class="sr-only" for="point">网格编号</label><input id="point" type="number" min="0" max="16199" value="6596" step="1"><button id="next" aria-label="下一个坐标">→</button></div></div>
+      <p id="point-values" aria-live="polite"></p><p class="caption" id="point-error"></p>
+      <details><summary>联合任务题目</summary><pre id="prompt"></pre></details>
+      <details open><summary>分类 + 高程 · 原始回答</summary><pre id="answer">读取回答…</pre></details>
+      <details id="classification-answer-panel"><summary>仅分类任务 · 同坐标回答 <span id="classification-label"></span></summary><p class="caption" id="classification-point-note"></p><pre id="classification-answer"></pre></details>
+    </div>
+  </section>
+
+  <section><div class="section-head"><div><p class="eyebrow">03 / THE HARD PARTS</p><h2>From peaks to the abyss.</h2></div><span class="section-note">各高程档的联合准确率 · ±500 m</span></div><div id="strata" class="strata"></div></section>
+
+  <section class="method" id="method">
+    <div class="section-head"><div><p class="eyebrow">04 / HOW TO READ THE SCORES</p><h2>Same coordinates. Different questions.</h2></div></div>
+    <div class="method-grid"><article><span class="task-number">01</span><h3>分类 + 高程</h3><p>输入经纬度，预测 Solid / Water 和高程。普通陆地取裸地高程，接地冰取冰面高程，水体取海床或湖底高程。</p><p id="reference-coverage"></p></article><article><span class="task-number secondary">02</span><h3>仅分类</h3><p>对相同坐标，只回答固体或水体。独立任务的准确率单独列出，不是从高程任务的回答里再计算一次。</p><p>旧任务中的 Land 与本任务的 Solid 使用同一分类参考。已确认的同一模型名称合并展示，各任务保留原始运行名称。</p></article></div>
+    <details><summary>评分口径、数据来源与已知限制</summary><div class="method-details"><p>准确率按 cos(latitude) 加权。无效回答计错；未决请求从分子和分母剔除，覆盖率单独展示。MAE 仅统计可解析且参考高程有效的数值，包含分类错误的回答。</p><p>参考为 GSHHG 2.3.7 与 ETOPO 2022 的固定数据版本，包含测量及栅格误差。两个任务独立运行，提示词和推理预算不同，分数并非匹配计算量的对照实验。</p><p id="extraction-note"></p><p id="source-notes"></p></div></details>
+  </section>
+  <footer><span>LAND / WATER / ELEVATION</span><p>每点独立直接 API 请求 · 无 Agent、工具或地图输入</p><div><a href="RESULTS.md">结果与口径</a><a href="data.json" download>下载成绩</a><a href="reference.details.json" download>冻结参考</a><a href="THIRD_PARTY_NOTICES.md">数据许可</a><a href="https://github.com/Warren-swr/land-water-bench">GitHub</a></div></footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

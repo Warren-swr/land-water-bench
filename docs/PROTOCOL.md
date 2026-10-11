@@ -1,4 +1,6 @@
-# Evaluation protocol
+# Classification-only evaluation protocol
+
+The primary task now also predicts terrain elevation; see [the global terrain protocol](TERRAIN-GLOBAL.md). This page documents the independent classification task and its historical experiments.
 
 ## Input and sampling
 
@@ -12,9 +14,9 @@ Each coordinate gets an independent user message. No system prompt, agent tools,
 
 ## Answer extraction
 
-Version: `land-water-answer/2.1-boundary-lines`. Only the returned **answer text** is considered. Provider reasoning/thinking blocks are excluded.
+Current version: `land-water-answer/2.2-explicit-labels`; the historical 2026-10-10 snapshot retains `land-water-answer/2.1-boundary-lines`. Only the returned **answer text** is considered. Provider reasoning/thinking blocks are excluded.
 
-An exact `Land` or `Water` is accepted case-insensitively. A final explicit answer line may have balanced Markdown wrappers, a code fence, simple punctuation, or an explicit answer prefix. A leading standalone answer followed by an explanation is accepted only if the explanation has no contrary land/water word and no ambiguity marker. Conflicting consecutive final labels, ambiguous prose, unclosed fences, empty text, and output truncation remain invalid. The parser does not inspect the reference or model identity.
+An exact `Land` or `Water` is accepted case-insensitively. A final explicit answer line may have balanced Markdown wrappers, a code fence, simple punctuation, or an explicit answer prefix. A leading standalone answer can be followed by an explanation mentioning either geographic category. Explicit conflicting answers and uncertainty about the classification remain invalid; incidental mentions of land/water or possible seasonal sea ice do not override the explicit answer. The old 2.1 parser used a broader contrary-word check; its saved snapshot remains verifiable with that version. Conflicting consecutive final labels, ambiguous prose, unclosed fences, empty text, and output truncation remain invalid. The parser does not inspect the reference or model identity.
 
 Every bundled response is checked against this parser. The public provenance lists incomplete responses separately because the displayed text alone cannot establish whether the provider stopped at its output cap.
 
@@ -27,6 +29,8 @@ The numerator sums weights of correct, valid labels. The denominator includes va
 Land and water recall use valid predictions only. They can therefore look better than the main score for a model with many invalid answers. Point accuracy is unweighted and is not the ranking metric. Sorting is descending primary weighted accuracy, then model alias for a tie.
 
 ## Included experiments
+
+The current 2026-10-11 classification release has 40 invalid answers and 2 unresolved requests across 194,400 records. It includes the subsequent recovery and extraction corrections. [Current provenance](../results/2026-10-11/classification/provenance.json).
 
 The 2026-10-10 release contains 12 experiment aliases and 194,400 coordinate records. The 3 unresolved Kimi requests at (27° N, 91° E), (27° N, 93° E), and (27° N, 95° E) are gateway content-filter failures. They remain unresolved after recovery attempts and are excluded only for Kimi. There are 320 invalid answers; they count as wrong.
 

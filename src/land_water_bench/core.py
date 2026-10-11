@@ -69,6 +69,16 @@ def extract_answer(wire: str, body: dict) -> tuple[str, bool]:
     return text, body.get("stop_reason") == "end_turn" and not body.get("error")
 
 
+def response_is_filtered(body: dict) -> bool:
+    """Use provider metadata, never words in the model's answer, to identify filtering."""
+    error = body.get("error") or {}
+    return (body.get("stop_reason") == "content_filter"
+            or (body.get("incomplete_details") or {}).get("reason") == "content_filter"
+            or isinstance(error, dict) and (
+                error.get("type") == "content_filter" or error.get("code") == "content_filter"
+                or "DataInspectionFailed" in str(error.get("message", ""))))
+
+
 def usage_counts(usage: dict) -> dict:
     return {
         "input_tokens": usage.get("input_tokens", 0),

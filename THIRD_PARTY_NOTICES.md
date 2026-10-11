@@ -27,3 +27,13 @@ Comparison labels and lake names use Natural Earth 1:10m land/lakes at commit `c
 The coordinate responses in `results/` are saved outputs from the named experiment aliases. Original compilation, scoring code, documentation, and presentation are MIT-licensed where owned by the contributors. Model responses and trademarks are not represented as project-authored intellectual property or relicensed to override third-party terms. No model weights, service credentials, or access rights are included.
 
 The experiment was inspired by [Celeste's public post](https://x.com/celestepoasts/status/2103232383139057950). This repository is an independent reproduction, not an official implementation or endorsement by the author or model providers. No imagery or text from the post is bundled.
+
+## NOAA ETOPO 2022 (global terrain task and pilot)
+
+The global terrain task and optional pilot use NOAA NCEI ETOPO 2022 terrain and bathymetry grids, accessed through the NOAA OceanWatch ERDDAP mirror. Heights are referenced to EGM2008. Source data may be used and redistributed freely; NOAA supplies them without warranties of accuracy or fitness. The bundled `src/land_water_bench/data/terrain-global-dataset.json` includes the four native cell values per coordinate, interpolation results, reference masks, and source metadata. The original source files, access URLs, and hashes are retained with each reference run; source CSV slices can be downloaded with the reference builder.
+
+- Product: https://www.ncei.noaa.gov/products/etopo-global-relief-model
+- DOI: https://doi.org/10.25921/fd45-gt74
+- Mirror and data-use statement: https://oceanwatch.pifsc.noaa.gov/erddap/griddap/ETOPO_2022_v1_15s.html
+
+GSHHG-derived classification labels and the terrain page's background grid retain the GSHHG license notices above.

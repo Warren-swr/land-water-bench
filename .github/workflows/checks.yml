@@ -26,7 +26,7 @@ jobs:
           lwb serve --directory dist --port 8732 > /tmp/land-water-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
-          python scripts/check_browser.py --url http://127.0.0.1:8732/ --output runs/browser-check
+          python scripts/check_unified_browser.py --url http://127.0.0.1:8732/ --output runs/browser-check
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -17,6 +17,10 @@ from land_water_bench.answers import parse_final_answer, reextract_record
     ("Water\nWater", 0),
     ("**Land**\n\nThese coordinates fall within Greenland.", 1),
     ("Answer: Water\n\nThe point is offshore.", 0),
+    ("**Water**\n\nThe nearest land is Greenland, far to the south.", 0),
+    ("**Water**\n\nThis point lies in the water rather than on land.", 0),
+    ("Land\n\nThere is water nearby, but the coordinate is inland.", 1),
+    ("Water\n\nFar from the nearest land, possibly with seasonal sea ice or drifting icebergs.", 0),
 ])
 def test_explicit_terminal_answer_and_exact_evidence_span(text, label):
     answer = parse_final_answer(text)
@@ -35,9 +39,18 @@ def test_explicit_terminal_answer_and_exact_evidence_span(text, label):
     "**Water*", "Water..", "Water...", "Waterfall", "Landmass", "Inland", "Freshwater", "The answer island",
     "```\nLand\nWater\n```", "```\nWater", "Explanation\nWater\n```",
     "{\"answer\": \"Water\", \"alternative\": \"Land\"}",
+    "Water\n\nActually the point is on land.",
+    "Water\n\nThe classification is Land.\nFurther explanation.",
 ])
 def test_ambiguous_prose_missing_and_malformed_answers_remain_invalid(text):
     assert parse_final_answer(text)["label"] is None
+
+
+def test_legacy_classification_results_still_use_their_frozen_parser():
+    from land_water_bench.answers import LEGACY_VERSION
+    text = 'Water\n\nThe nearest land is far away.'
+    assert parse_final_answer(text, version=LEGACY_VERSION)['label'] is None
+    assert parse_final_answer(text)['label'] == 0
 
 
 def record(body, text, status="invalid", label=None):

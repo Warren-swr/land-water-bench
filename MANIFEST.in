@@ -4,6 +4,7 @@ recursive-include docs *.md *.png
 recursive-include web *.html *.css *.js *.ttf *.txt
 include results/README.md
 recursive-include results/2026-10-10 *.json *.md *.sha256
+recursive-include results/2026-10-11 *.json *.md *.sha256
 recursive-include scripts *.py
 recursive-include tests *.py
 recursive-include licenses *.txt
