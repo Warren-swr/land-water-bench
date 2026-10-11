@@ -21,7 +21,7 @@ Inspired by [Celeste’s experiment](https://x.com/celestepoasts/status/21032323
 - **12 models × 2 tasks × 16,200 coordinates = 388,800 records**, including final answer text, predictions, invalid and unresolved states, settings, completion evidence, and frozen checksums.
 - Frozen **GSHHG 2.3.7** classification and **ETOPO 2022 / EGM2008** elevation references. The terrain input includes all prompts, four native cell values per point, and the predeclared height mask.
 - Direct API runners for Responses and Messages protocols, per-model concurrency, bounded retries, checkpointing, and resumable runs.
-- A light-themed unified leaderboard with interactive globes, elevation scatter plots, per-stratum scores, and both tasks’ answers for each coordinate.
+- One light-themed leaderboard with model filters, CSV export, a rotating reference globe, globe/flat-map views, elevation/error/classification layers, and both tasks’ answers for each coordinate. Joint classification + elevation remains the primary ranking; independent classification stays in its own column.
 - Offline verification, static-site building, tests, and GitHub Pages deployment. No external workspace paths, private data mounts, or symlinks are required.
 
 The latest snapshot is **2026-10-11**, after timeout recovery and answer-extraction corrections. It contains 471 invalid / 723 unresolved terrain records and 40 invalid / 2 unresolved classification records. Seed 0902 and 0915 are displayed as one model, as explicitly confirmed, while retaining each task’s original source identity.

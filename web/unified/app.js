@@ -3,7 +3,7 @@
   const $ = id => document.getElementById(id);
   const pct = n => n == null ? '—' : (100 * n).toFixed(2) + '%';
   const meters = n => n == null ? '—' : Math.round(n).toLocaleString('en-US') + ' m';
-  const colors = {solid:'#ba782b',water:'#4c68d7',error:'#d26487',muted:'#939bb2',grid:'#dce1ef',ink:'#24263c'};
+  const colors = {solid:'#596cd8',water:'#edf1fa',error:'#cb6789',invalid:'#b08536',unresolved:'#9674b1',masked:'#b5bdcc',correct:'#becbe2',muted:'#647086',grid:'#dce2ed',ink:'#192133'};
   const strataNames = {solid_low:['低地','< 200 m'],solid_mid:['丘陵 / 中低地','200–1,000 m'],solid_high:['高地','1,000–2,500 m'],solid_alpine:['高山 / 高原 / 冰原','≥ 2,500 m'],water_shelf:['浅海','水深 < 500 m'],water_slope:['中等水深','500–2,500 m'],water_deep:['深海','2,500–4,500 m'],water_abyssal:['更深海域','≥ 4,500 m']};
   const displayNames = {'gpt-6-astra':'GPT-6 Astra','gpt-5.6-sol':'GPT-5.6 Sol','gpt-5.6-terra':'GPT-5.6 Terra','claude-opus-5-5':'Claude Opus 5.5','claude-sonnet-5-5':'Claude Sonnet 5.5','claude-haiku-5-5':'Claude Haiku 5.5','kimi-k3':'Kimi K3','mimo-v2.6-pro':'MiMo V2.6 Pro','qwen3.8-max':'Qwen 3.8 Max','deepseek-v4.1-flash':'DeepSeek V4.1 Flash','step-5-preview':'Step 5 Preview','seed-2.1':'Seed 2.1'};
   const statusNames = {ok:'有效回答',invalid:'无效回答',infra_error:'请求未决'};
@@ -11,6 +11,10 @@
   let metadata, reference, model = null, records = null, classificationRecords = null;
   let selected = 6596, yaw = -100, pitch = 20, hits = {}, redraw = false, loading = 0;
   let terrainError = null, classificationError = null;
+  let family = 'all', search = '', view = 'map', layer = 'elevation';
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let motion = !reduceMotion.matches, heroVisible = false, heroFrame = 0, heroTime = 0, heroYaw = 12;
+  const rasters = new Map();
   const cache = new Map();
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -32,16 +36,113 @@
   }
 
   function canvas(id) { const c=$(id),dpr=window.devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.font='11px Arial';return {ctx,w,h}; }
-  function project(lat,lon,r=1) { const a=(lon+yaw)*Math.PI/180,b=lat*Math.PI/180,t=pitch*Math.PI/180,x=Math.cos(b)*Math.sin(a),y=Math.sin(b),z=Math.cos(b)*Math.cos(a);return [r*x,r*(y*Math.cos(t)-z*Math.sin(t)),r*(y*Math.sin(t)+z*Math.cos(t))]; }
+  function project(lat,lon,r=1,rotation=yaw,tilt=pitch) { const a=(lon+rotation)*Math.PI/180,b=lat*Math.PI/180,t=tilt*Math.PI/180,x=Math.cos(b)*Math.sin(a),y=Math.sin(b),z=Math.cos(b)*Math.cos(a);return [r*x,r*(y*Math.cos(t)-z*Math.sin(t)),r*(y*Math.sin(t)+z*Math.cos(t))]; }
+  const heightStops = [[-10000,[39,67,157]],[-4000,[98,142,201]],[0,[224,233,246]],[200,[233,197,162]],[2500,[168,98,67]],[6000,[100,73,130]]];
+  function heightColor(height) {
+    if (height == null) return colors.masked;
+    const value = Math.max(-10000, Math.min(6000, height));
+    const upper = heightStops.findIndex(([stop]) => stop >= value);
+    if (!upper) return 'rgb(' + heightStops[0][1].join(',') + ')';
+    const [low, a] = heightStops[upper - 1], [high, b] = heightStops[upper], t = (value - low) / (high - low);
+    return 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',') + ')';
+  }
+  function wrong(p, row) {
+    return row?.status === 'invalid' || (row?.status === 'ok' &&
+      (row.label !== p.truth || Math.abs(row.prediction.elevation_m - p.elevation_m) > 500));
+  }
+  function pointColor(p, predicted) {
+    const row = records?.[p.id];
+    if (predicted && row?.status !== 'ok') return row?.status === 'invalid' ? colors.invalid : colors.unresolved;
+    if (layer === 'classification') return (predicted ? row.label : p.truth) ? colors.solid : colors.water;
+    if (p.elevation_m == null) return colors.masked;
+    if (layer === 'error') return predicted && wrong(p, row) ? colors.error : colors.correct;
+    return heightColor(predicted ? row.prediction.elevation_m : p.elevation_m);
+  }
+  function heroGlobe() {
+    if (!reference) return;
+    const {ctx,w,h} = canvas('hero-globe'), cx = w / 2, cy = h / 2, R = Math.min(w * .36, h * .41);
+    const glow = ctx.createRadialGradient(cx - R * .3, cy - R * .5, 0, cx, cy, R);
+    glow.addColorStop(0, '#fbfcff'); glow.addColorStop(.8, '#eaf0fc'); glow.addColorStop(1, '#dce5f8');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = .65; ctx.strokeStyle = '#a7b8df70';
+    for (let lat = -60; lat <= 60; lat += 30) {
+      ctx.beginPath();
+      for (let lon = -180; lon <= 180; lon += 3) {
+        const [x,y] = project(lat, lon, 1, heroYaw, 16);
+        if (lon === -180) ctx.moveTo(cx + x * R, cy - y * R); else ctx.lineTo(cx + x * R, cy - y * R);
+      }
+      ctx.stroke();
+    }
+    for (let lon = 0; lon < 180; lon += 30) {
+      ctx.beginPath();
+      for (let lat = -180; lat <= 180; lat += 3) {
+        const [x,y] = project(lat, lon, 1, heroYaw, 16);
+        if (lat === -180) ctx.moveTo(cx + x * R, cy - y * R); else ctx.lineTo(cx + x * R, cy - y * R);
+      }
+      ctx.stroke();
+    }
+    for (const p of reference.points) {
+      const [x,y,z] = project(p.lat, p.lon, 1 + (p.elevation_m || 0) / 95000, heroYaw, 16);
+      if (z < 0 || (!p.truth && p.id % 3)) continue;
+      ctx.globalAlpha = p.truth ? .32 + z * .52 : .1 + z * .17;
+      ctx.fillStyle = p.truth ? (p.elevation_m > 2500 ? '#9970ac' : '#536fc5') : '#7196d7';
+      ctx.beginPath(); ctx.arc(cx + x * R, cy - y * R, Math.max(.65, R * .0052), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1; ctx.strokeStyle = '#99add344';
+    ctx.beginPath(); ctx.ellipse(cx, cy, R * 1.12, R * .30, -.34, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#b17b51'; ctx.beginPath(); ctx.arc(cx + R * .93, cy - R * .34, 2, 0, Math.PI * 2); ctx.fill();
+  }
+  function animateHero(time) {
+    heroFrame = 0;
+    if (!motion || !heroVisible || document.hidden) return;
+    if (!heroTime || time - heroTime >= 40) {
+      heroYaw += Math.min(heroTime ? time - heroTime : 0, 80) * .004;
+      heroTime = time; heroGlobe();
+    }
+    heroFrame = requestAnimationFrame(animateHero);
+  }
+  function syncMotion() {
+    $('motion-toggle').setAttribute('aria-pressed', String(motion));
+    $('motion-toggle').setAttribute('aria-label', motion ? '暂停地球动画' : '播放地球动画');
+    $('motion-toggle').textContent = motion ? 'Ⅱ' : '▶';
+    cancelAnimationFrame(heroFrame); heroTime = 0;
+    if (motion && heroVisible && !document.hidden) heroFrame = requestAnimationFrame(animateHero);
+  }
+  function flatMap(id, predicted) {
+    const {ctx,w,h} = canvas(id), key = predicted ? 'prediction' : 'reference';
+    if (predicted && !records) { loadingMap(ctx,w,h); return; }
+    if (!rasters.has(key)) {
+      const raster = document.createElement('canvas'); raster.width = 180; raster.height = 90;
+      const pixels = raster.getContext('2d');
+      for (const p of reference.points) {
+        pixels.fillStyle = pointColor(p, predicted);
+        pixels.fillRect(p.id % 180, Math.floor(p.id / 180), 1, 1);
+      }
+      rasters.set(key, raster);
+    }
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(rasters.get(key), 0, 0, w, h);
+    ctx.strokeStyle = '#758bb52e'; ctx.lineWidth = .6; ctx.beginPath();
+    for (let x = 0; x <= 180; x += 30) { ctx.moveTo(x / 180 * w,0); ctx.lineTo(x / 180 * w,h); }
+    for (let y = 15; y < 90; y += 15) { ctx.moveTo(0,y / 90 * h); ctx.lineTo(w,y / 90 * h); }
+    ctx.stroke();
+    const x = (selected % 180 + .5) / 180 * w, y = (Math.floor(selected / 180) + .5) / 90 * h;
+    ctx.strokeStyle = '#283e85'; ctx.lineWidth = 1; ctx.setLineDash([3,4]); ctx.beginPath();
+    ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.lineWidth = 1.5; ctx.strokeRect(x - 5,y - 5,10,10);
+  }
+  function loadingMap(ctx,w,h) {
+    ctx.fillStyle = colors.muted; ctx.textAlign = 'center';
+    ctx.fillText(terrainError || '读取已保存的高程预测…',w / 2,h / 2);
+  }
   function globe(id,predicted) {
     const {ctx,w,h}=canvas(id),cx=w/2,cy=h/2,R=Math.min(w*.39,h*.40);hits[id]=[];
     ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.fillStyle='#eef1f8';ctx.fill();ctx.strokeStyle=colors.grid;ctx.lineWidth=.7;
     for(let lat=-60;lat<=60;lat+=30){ctx.beginPath();let on=false;for(let lon=-180;lon<=180;lon+=3){const [x,y,z]=project(lat,lon);if(z>=0){if(on)ctx.lineTo(cx+x*R,cy-y*R);else ctx.moveTo(cx+x*R,cy-y*R);on=true;}else on=false;}ctx.stroke();}
     for(let lon=-180;lon<180;lon+=30){ctx.beginPath();let on=false;for(let lat=-90;lat<=90;lat+=3){const [x,y,z]=project(lat,lon);if(z>=0){if(on)ctx.lineTo(cx+x*R,cy-y*R);else ctx.moveTo(cx+x*R,cy-y*R);on=true;}else on=false;}ctx.stroke();}
     ctx.fillStyle='#c6cddd';for(const p of reference.points){if(!p.truth)continue;const [x,y,z]=project(p.lat,p.lon);if(z>0){ctx.beginPath();ctx.arc(cx+x*R,cy-y*R,Math.max(.6,R*.008),0,Math.PI*2);ctx.fill();}}
-    if(predicted&&!records){ctx.fillStyle=colors.muted;ctx.textAlign='center';ctx.fillText(terrainError?'高程结果读取失败，请刷新重试':'读取已保存的高程预测…',cx,cy);return;}
+    if(predicted&&!records){loadingMap(ctx,w,h);return;}
     const dots=[];
-    for(const p of reference.points){const row=records?.[p.id],e=predicted?row?.prediction?.elevation_m:p.elevation_m;if(e==null)continue;const [x,y,z]=project(p.lat,p.lon,1+Math.max(-10000,Math.min(10000,e))/40000);if(z<=0)continue;const [sx,sy]=project(p.lat,p.lon);const wrong=predicted&&(row.label!==p.truth||(p.elevation_m!=null&&Math.abs(e-p.elevation_m)>500));dots.push({id:p.id,x:cx+x*R,y:cy-y*R,z,sx:cx+sx*R,sy:cy-sy*R,color:wrong?colors.error:(predicted?row.label:p.truth)?colors.solid:colors.water});}
+    for(const p of reference.points){const row=records?.[p.id],e=predicted?row?.prediction?.elevation_m:p.elevation_m;const radius=layer==='classification'?1:1+Math.max(-10000,Math.min(10000,e||0))/40000;const [x,y,z]=project(p.lat,p.lon,radius);if(z<=0)continue;const [sx,sy]=project(p.lat,p.lon);dots.push({id:p.id,x:cx+x*R,y:cy-y*R,z,sx:cx+sx*R,sy:cy-sy*R,color:pointColor(p,predicted)});}
     dots.sort((a,b)=>a.z-b.z);
     for(const d of dots){if(d.id===selected){ctx.strokeStyle=d.color;ctx.globalAlpha=.45;ctx.beginPath();ctx.moveTo(d.sx,d.sy);ctx.lineTo(d.x,d.y);ctx.stroke();ctx.globalAlpha=1;}ctx.fillStyle=d.color;ctx.beginPath();ctx.arc(d.x,d.y,d.id===selected?4:1.1,0,Math.PI*2);ctx.fill();hits[id].push(d);}
     const chosen=dots.find(d=>d.id===selected);if(chosen){ctx.strokeStyle=colors.ink;ctx.lineWidth=1.3;ctx.beginPath();ctx.arc(chosen.x,chosen.y,7,0,Math.PI*2);ctx.stroke();}
@@ -56,7 +157,7 @@
     ctx.strokeStyle=colors.grid;ctx.fillStyle=colors.muted;
     for(let t=lo;t<=hi+tick*.01;t+=tick){ctx.beginPath();ctx.moveTo(x(t),top);ctx.lineTo(x(t),bottom);ctx.moveTo(left,y(t));ctx.lineTo(right,y(t));ctx.stroke();ctx.textAlign='center';ctx.fillText(fmt(t),x(t),bottom+18);ctx.textAlign='right';ctx.fillText(fmt(t),left-8,y(t)+4);}
     ctx.strokeStyle=colors.muted;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(x(lo),y(lo));ctx.lineTo(x(hi),y(hi));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=colors.ink;ctx.textAlign='left';ctx.fillText('模型高程（m）',left,12);ctx.textAlign='right';ctx.fillText('参考高程（m）',right,h-4);
-    for(const [p,r,e] of data){const px=x(p.elevation_m),py=y(e);ctx.fillStyle=Math.abs(e-p.elevation_m)>500||r.label!==p.truth?colors.error:colors.water;ctx.globalAlpha=p.id===selected?1:.22;ctx.beginPath();ctx.arc(px,py,p.id===selected?4:1.5,0,Math.PI*2);ctx.fill();hits.scatter.push({id:p.id,x:px,y:py});}ctx.globalAlpha=1;
+    for(const [p,r,e] of data){const px=x(p.elevation_m),py=y(e);ctx.fillStyle=Math.abs(e-p.elevation_m)>500||r.label!==p.truth?colors.error:'#4c68d7';ctx.globalAlpha=p.id===selected?1:.22;ctx.beginPath();ctx.arc(px,py,p.id===selected?4:1.5,0,Math.PI*2);ctx.fill();hits.scatter.push({id:p.id,x:px,y:py});}ctx.globalAlpha=1;
   }
   function explainReason(reason) { return (reason||'').split(';').map(s=>({unsupported_lake:'湖底高程参考未验收',unsupported_river_lake:'河湖参考未验收',unsupported_island_in_lake:'嵌套岛屿参考未验收',unsupported_floating_ice_shelf:'冰架下海床参考未验收',classification_reference_disagreement_or_boundary:'参考分类冲突 / 边界点',ocean_bed_vs_surface_height_conflict:'海洋类型与高程冲突'}[s]||s)).join('；'); }
   function answerStatus(row) { return row?.error_type === 'content_filter' ? '请求未决 · 内容过滤' : statusNames[row?.status]; }
@@ -64,6 +165,7 @@
   function details() {
     const p = reference.points[selected], r = records?.[selected], c = classificationRecords?.[selected];
     const kind = p.truth ? 'Solid' : 'Water';
+    $('point-title').textContent = coordinate(p);
     $('point-values').textContent = '参考 ' + kind + ' · ' + (p.elevation_m == null ? '高程不可评分' : meters(p.elevation_m)) +
       ' → 预测 ' + (r?.prediction?.type || statusNames[r?.status] || '读取中') + ' · ' + meters(r?.prediction?.elevation_m);
     $('point-error').textContent = '#' + selected + ' · ' + p.lat + '°, ' + p.lon + '° · ' +
@@ -84,8 +186,9 @@
   }
   function draw() {
     if (!reference) return;
-    globe('reference', false);
-    globe('prediction', true);
+    const paint = view === 'map' ? flatMap : globe;
+    paint('reference', false);
+    paint('prediction', true);
     scatter();
     details();
   }
@@ -127,11 +230,14 @@
     const token = ++loading;
     model = chosen;
     records = classificationRecords = null;
+    rasters.clear();
     terrainError = classificationError = null;
     $('prediction').setAttribute('aria-busy', 'true');
     $('model').value = name;
     $('selected-model').textContent = nameOf(chosen);
     $('selected-model').dataset.model = name;
+    $('prediction-score').textContent = pct(chosen.terrain.metrics.joint_accuracy['500']);
+    $('error-example').disabled = true;
     document.querySelectorAll('#ranking tr').forEach(row => row.classList.toggle('row-selected', row.dataset.model === name));
     updateSummary();
     updateStrata();
@@ -145,6 +251,7 @@
     else terrainError = results[0].reason.message;
     if (results[1].status === 'fulfilled') classificationRecords = results[1].value;
     else classificationError = results[1].reason.message;
+    $('error-example').disabled = !records || !reference.points.some(p => p.elevation_m != null && wrong(p, records[p.id]));
     draw();
     $('prediction').setAttribute('aria-busy', 'false');
   }
@@ -166,16 +273,26 @@
       ' · 已恢复有效 ' + r.recovered_valid.toLocaleString('en-US') + ' 条 · 当前成绩为重试前快照' :
       '两项任务均已完成 · 按联合准确率排序';
   }
-  function paintMetadata(preferredName) {
+  function visibleModels() {
+    return metadata.models.filter(m => {
+      const group = m.name.split('-')[0];
+      return (family === 'all' || (family === 'other' ? !['gpt','claude'].includes(group) : group === family)) &&
+        (m.name + ' ' + nameOf(m)).toLowerCase().includes(search);
+    });
+  }
+  function renderLeaderboard() {
     $('ranking').replaceChildren();
-    let rank = 0;
-    for (const m of metadata.models) {
+    const visible = visibleModels();
+    for (const m of visible) {
+      const rank = metadata.models.filter(item => item.terrain).indexOf(m) + 1;
       const s = m.terrain?.metrics, c = m.classification?.metrics;
       const row = el('tr', s ? '' : 'only-classification');
       row.dataset.model = m.name;
+      row.classList.toggle('leader', rank === 1);
+      row.classList.toggle('row-selected', model?.name === m.name);
       const td = el('td'), identity = el('div', 'model-cell');
       const family = m.name.split('-')[0], badge = {claude:'C',seed:'S',gpt:'G',kimi:'K',mimo:'M',qwen:'Q',step:'S',deepseek:'D'}[family] || '·';
-      identity.append(el('span', 'rank', s ? String(++rank).padStart(2, '0') : '—'), el('span', 'family-icon ' + family, badge));
+      identity.append(el('span', 'rank', s ? String(rank).padStart(2, '0') : '—'), el('span', 'family-icon ' + family, badge));
       const title = el('div'), modelName = el(s ? 'button' : 'span', 'model-name' + (s ? ' model-button' : ''), nameOf(m));
       if (s) {
         modelName.setAttribute('aria-label', '查看 ' + nameOf(m) + ' 的联合任务');
@@ -184,7 +301,7 @@
           $('explore').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'});
         });
       }
-      title.append(modelName, el('span', 'model-alias', s ? m.name : m.name + ' · 仅分类任务'));
+      title.append(modelName, el('span', 'model-alias', family.toUpperCase() + (s ? '' : ' · 仅分类任务')));
       identity.append(title); td.append(identity); row.append(td);
       row.append(scoreCell(s?.joint_accuracy['500']));
       const mae = el('td');
@@ -205,8 +322,14 @@
       row.append(coverage);
       $('ranking').append(row);
     }
+    $('empty-state').hidden = visible.length > 0;
+    $('result-count').textContent = visible.length + ' / ' + metadata.models.length + ' MODELS';
+  }
+  function paintMetadata(preferredName) {
+    renderLeaderboard();
+    $('count-all').textContent = metadata.models.length;
     for (const [id, task] of [['terrain-count','terrain'], ['classification-count','classification']]) {
-      $(id).replaceChildren(document.createTextNode(metadata.sources[task].model_count), el('small', '', ' models'));
+      $(id).textContent = metadata.sources[task].model_count;
     }
     paintStatus();
     $('reference-coverage').textContent = '完整请求 16,200 个坐标；其中 ' + metadata.height_scorable.toLocaleString('en-US') +
@@ -253,9 +376,140 @@
     } catch (error) { $('load-status').textContent = error.message; }
   }
 
-  function pick(id,event){const r=$(id).getBoundingClientRect(),x=event.clientX-r.left,y=event.clientY-r.top;let best=null,dist=14;for(const p of hits[id]||[]){const d=Math.hypot(p.x-x,p.y-y);if(d<dist){best=p;dist=d;}}if(best){selected=best.id;queueDraw();}}
-  for(const id of ['reference','prediction']){let first,last,moved;$(id).addEventListener('pointerdown',e=>{first=last={x:e.clientX,y:e.clientY};moved=false;$(id).setPointerCapture(e.pointerId);});$(id).addEventListener('pointermove',e=>{if(!last)return;moved=moved||Math.hypot(e.clientX-first.x,e.clientY-first.y)>4;yaw+=(e.clientX-last.x)*.45;pitch=Math.max(-80,Math.min(80,pitch-(e.clientY-last.y)*.35));last={x:e.clientX,y:e.clientY};queueDraw();});$(id).addEventListener('pointerup',e=>{if(!moved)pick(id,e);last=null;});$(id).addEventListener('pointercancel',()=>last=null);}
-  $('scatter').addEventListener('click',e=>pick('scatter',e));$('model').addEventListener('change',()=>setModel($('model').value));$('point').addEventListener('change',()=>{selected=Math.max(0,Math.min(16199,Math.round(Number($('point').value)||0)));const p=reference.points[selected];yaw=-p.lon;pitch=Math.max(-80,Math.min(80,p.lat));queueDraw();});$('previous').addEventListener('click',()=>{selected=Math.max(0,selected-1);queueDraw();});$('next').addEventListener('click',()=>{selected=Math.min(16199,selected+1);queueDraw();});
+  function coordinate(p) {
+    return Math.abs(p.lat) + '° ' + (p.lat >= 0 ? 'N' : 'S') + ' / ' + Math.abs(p.lon) + '° ' + (p.lon >= 0 ? 'E' : 'W');
+  }
+  function selectPoint(id, orient = false, reveal = false) {
+    if (!reference) return;
+    selected = Math.max(0, Math.min(reference.points.length - 1, id));
+    const p = reference.points[selected];
+    if (orient) { yaw = -p.lon; pitch = Math.max(-80,Math.min(80,p.lat)); }
+    $('hover-coordinate').textContent = coordinate(p) + ' · #' + selected;
+    queueDraw();
+    if (reveal) $('inspect').scrollIntoView({behavior:reduceMotion.matches ? 'instant' : 'smooth',block:'nearest'});
+  }
+  function locate(lat,lon) {
+    const id = Math.max(0,Math.min(89,Math.round((89 - lat) / 2))) * 180 + Math.max(0,Math.min(179,Math.round((lon + 179) / 2)));
+    selectPoint(id,true,true);
+    $('explore-message').textContent = '已定位到最近的采样点：' + coordinate(reference.points[id]) + '。';
+  }
+  function hitPoint(id,event) {
+    const r = $(id).getBoundingClientRect(), x = event.clientX - r.left, y = event.clientY - r.top;
+    if (id !== 'scatter' && view === 'map') return Math.min(89,Math.max(0,Math.floor(y / r.height * 90))) * 180 + Math.min(179,Math.max(0,Math.floor(x / r.width * 180)));
+    let best = null, dist = 14;
+    for (const p of hits[id] || []) {
+      const d = Math.hypot(p.x - x,p.y - y);
+      if (d < dist) { best = p.id; dist = d; }
+    }
+    return best;
+  }
+  function updateMapControls() {
+    rasters.clear();
+    $('worlds').classList.toggle('is-map',view === 'map');
+    for (const [id,label] of [['reference','全球参考'],['prediction','模型预测']]) {
+      $(id).setAttribute('aria-label',label + (view === 'globe' ? '地球，可拖动旋转' : '平面地图') + '，点击采样点或用方向键选择坐标');
+    }
+    for (const key of ['view','layer']) document.querySelectorAll('[data-' + key + ']').forEach(button => {
+      const active = button.dataset[key] === (key === 'view' ? view : layer);
+      button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active));
+    });
+    const legend = $('map-legend'); legend.replaceChildren();
+    const entries = layer === 'elevation' ? [] : layer === 'classification' ?
+      [[colors.solid,'固体'],[colors.water,'水体']] : [[colors.correct,'联合正确'],[colors.error,'联合错误']];
+    if (layer === 'elevation') {
+      const scale = el('span'), swatch = el('i','height-scale');
+      swatch.style.background = 'linear-gradient(90deg,' + heightStops.map(([value,rgb]) => 'rgb(' + rgb.join(',') + ') ' + ((value + 10000) / 160) + '%').join(',') + ')';
+      scale.append(el('span','','−10,000 m'),swatch,el('span','','+6,000 m')); legend.append(scale);
+    }
+    for (const [color,label] of [...entries,[colors.invalid,'无效'],[colors.unresolved,'未决'],...(layer === 'classification' ? [] : [[colors.masked,'高程参考不可评分']])]) {
+      const item = el('span'), swatch = el('i'); swatch.style.background = color; item.append(swatch,el('span','',label)); legend.append(item);
+    }
+    $('hover-coordinate').textContent = view === 'map' ? '点击网格 · 查看坐标回答 ↗' : '拖动旋转 · 点击采样点 ↗';
+    const note = layer === 'classification' ? '固体 / 水体视图来自联合任务回答；榜单“仅分类准确率”来自另一次独立任务。' :
+      layer === 'error' ? '右图标出类型错误或高程误差 >500 m 的点；高程参考不可评分点、无效回答与未决分别标注。' :
+        '颜色表示海床到山峰的高程，色阶两端截在 −10,000 / +6,000 m。';
+    $('plot-note').textContent = note + (view === 'globe' && layer !== 'classification' ? ' 径向高程夸张约 160 倍，显示范围 ±10,000 m。' : '') + ' 所有采样点直接绘制，不做插值；评分使用原始数值。';
+    queueDraw();
+  }
+  for (const id of ['reference','prediction']) {
+    let first, last, moved;
+    $(id).addEventListener('pointerdown',event => {
+      first = last = {x:event.clientX,y:event.clientY}; moved = false; $(id).setPointerCapture(event.pointerId);
+    });
+    $(id).addEventListener('pointermove',event => {
+      if (last) {
+        moved = moved || Math.hypot(event.clientX - first.x,event.clientY - first.y) > 4;
+        if (view === 'globe') {
+          yaw += (event.clientX - last.x) * .45;
+          pitch = Math.max(-80,Math.min(80,pitch - (event.clientY - last.y) * .35));
+          queueDraw();
+        }
+        last = {x:event.clientX,y:event.clientY};
+      } else if (reference) {
+        const point = hitPoint(id,event);
+        if (point != null) $('hover-coordinate').textContent = coordinate(reference.points[point]) + ' · #' + point;
+      }
+    });
+    $(id).addEventListener('pointerup',event => {
+      if (last && !moved) { const point = hitPoint(id,event); if (point != null) selectPoint(point,false,true); }
+      last = null;
+    });
+    $(id).addEventListener('pointercancel',() => last = null);
+    $(id).addEventListener('keydown',event => {
+      const step = {ArrowLeft:-1,ArrowRight:1,ArrowUp:-180,ArrowDown:180}[event.key];
+      if (step) { event.preventDefault(); selectPoint(selected + step,true); }
+    });
+  }
+  $('scatter').addEventListener('click',event => { const point = hitPoint('scatter',event); if (point != null) selectPoint(point,true); });
+  $('model').addEventListener('change',() => setModel($('model').value));
+  $('point').addEventListener('change',() => selectPoint(Math.round(Number($('point').value) || 0),true));
+  $('previous').addEventListener('click',() => selectPoint(selected - 1,true));
+  $('next').addEventListener('click',() => selectPoint(selected + 1,true));
+  document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click',() => { view = button.dataset.view; updateMapControls(); }));
+  document.querySelectorAll('[data-layer]').forEach(button => button.addEventListener('click',() => { layer = button.dataset.layer; updateMapControls(); }));
+  document.querySelectorAll('[data-coordinate]').forEach(button => button.addEventListener('click',() => { if (reference) locate(...button.dataset.coordinate.split(',').map(Number)); }));
+  $('coordinate-form').addEventListener('submit',event => {
+    event.preventDefault(); if (!reference) return;
+    locate(Number($('latitude').value),Number($('longitude').value));
+    document.querySelector('.coordinate-picker').open = false;
+  });
+  $('error-example').addEventListener('click',() => {
+    if (!records) return;
+    const candidates = reference.points.filter(p => p.elevation_m != null && wrong(p,records[p.id]));
+    if (!candidates.length) return;
+    const p = candidates.find(p => p.id > selected) || candidates[0];
+    selectPoint(p.id,true,true);
+    $('explore-message').textContent = '联合判断错误：' + coordinate(p) + '。原始回答见下方。';
+  });
+  function filterLeaderboard() {
+    document.querySelectorAll('[data-family]').forEach(button => {
+      const active = button.dataset.family === family;
+      button.classList.toggle('active',active); button.setAttribute('aria-pressed',String(active));
+    });
+    if (metadata) renderLeaderboard();
+  }
+  document.querySelectorAll('[data-family]').forEach(button => button.addEventListener('click',() => { family = button.dataset.family; filterLeaderboard(); }));
+  $('model-search').addEventListener('input',() => { search = $('model-search').value.trim().toLowerCase(); filterLeaderboard(); });
+  $('reset-filters').addEventListener('click',() => { family = 'all'; search = ''; $('model-search').value = ''; filterLeaderboard(); });
+  document.addEventListener('keydown',event => {
+    if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.matches('input,textarea,select,[contenteditable]')) { event.preventDefault(); $('model-search').focus(); }
+  });
+  $('download-csv').addEventListener('click',() => {
+    if (!metadata) return;
+    const rows = [['model','joint_accuracy_500','elevation_mae_m','independent_classification_accuracy','terrain_coverage','terrain_invalid','terrain_unresolved']];
+    for (const m of visibleModels()) {
+      const t = m.terrain?.metrics;
+      rows.push([m.name,t?.joint_accuracy['500'],t?.elevation_mae_m,m.classification?.metrics.weighted_accuracy,t?.coverage,t?.invalid,t?.infra_errors]);
+    }
+    const csv = rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"','""') + '"').join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\ufeff' + csv],{type:'text/csv;charset=utf-8'})), link = el('a');
+    link.href = url; link.download = 'land-water-elevation-leaderboard.csv'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url),1000);
+  });
+  $('motion-toggle').addEventListener('click',() => { motion = !motion; syncMotion(); });
+  reduceMotion.addEventListener('change',() => { motion = !reduceMotion.matches; syncMotion(); });
+  document.addEventListener('visibilitychange',syncMotion);
+  syncMotion();
 
   Promise.all([json('data.json'), json('reference.details.json')]).then(([data, ref]) => {
     if (data.schema !== 'land-water-unified/1.0' || data.sources.terrain.dataset_sha256 !== ref.dataset_sha256) {
@@ -264,9 +518,13 @@
     metadata = data;
     reference = ref;
     paintMetadata();
+    updateMapControls();
+    heroGlobe();
     queueDraw();
     new ResizeObserver(queueDraw).observe($('reference'));
     new ResizeObserver(queueDraw).observe($('scatter'));
+    new ResizeObserver(heroGlobe).observe($('hero-globe'));
+    new IntersectionObserver(entries => { heroVisible = entries[0].isIntersecting; syncMotion(); }).observe($('hero-globe'));
     setInterval(refreshRecovery, 15000);
   }).catch(error => {
     $('load-status').textContent = error.message;

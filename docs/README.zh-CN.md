@@ -23,6 +23,8 @@ lwb serve --directory dist --port 8732
 
 打开 <http://localhost:8732>。默认校验并展示两项最新任务；不需要 API Key、外部工作区或下载地理源文件。再次构建可使用新的 `--output` 目录。
 
+展示统一在高程主页面：沿用分类旧版的蓝白排版、点阵地球和地图布局，支持模型筛选、CSV 下载、地球／平面切换，以及高程、错误和固体／水体视图。定位坐标后可查看两次任务的原始回答；主榜继续按联合准确率排序，“仅分类”单独列出。
+
 ## 运行模型
 
 复制 `configs/models.example.yaml` 为 `configs/local.yaml`，按配置中的环境变量提供完整 API 地址、密钥和实际可用模型 ID。配置支持 Responses 和 Messages；程序不自动读取 `.env`。

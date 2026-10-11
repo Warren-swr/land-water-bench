@@ -3,93 +3,93 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f8f9fc">
   <title>Land / Water / Elevation · Benchmark</title>
-  <meta name="description" content="16,200 个全球坐标，比较模型的固体、水体与高程预测。联合任务主榜与独立分类任务在同一页面呈现。">
+  <meta name="description" content="16,200 个全球坐标，一张模型记忆中的三维地球。固体、水体与高程联合预测排行榜。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f8f9fc'/%3E%3Cpath d='M7 8h7v7h-7zm9 0h9v7h-9zM7 17h7v7h-7z' fill='%233955d5'/%3E%3C/svg%3E">
+  <link rel="preload" href="display.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main>
-  <header>
-    <a class="brand" href="#"><span class="brand-mark" aria-hidden="true">◒</span> LAND / WATER BENCH</a>
-    <nav aria-label="页面导航"><a href="#leaderboard">Leaderboard</a><a href="#explore">Explore</a><a href="#method">Method</a></nav>
+<a class="skip-link" href="#leaderboard">跳到排行榜</a>
+<main id="top">
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Land Water Elevation 首页"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>LAND<span class="brand-slash">/</span>WATER<span class="brand-suffix">+ ELEVATION</span></a>
+    <nav aria-label="页面导航"><a href="#leaderboard">Leaderboard</a><a href="#explore">Atlas</a><a href="#method">Method</a><a href="https://github.com/Warren-swr/land-water-bench" target="_blank" rel="noreferrer">GitHub ↗</a></nav>
+    <span class="edition"><i></i> OCT 2026</span>
   </header>
-
   <section class="hero" aria-labelledby="title">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="live-dot"></span> GLOBAL GEOGRAPHIC INTELLIGENCE</p>
-      <h1 id="title">Beyond the<br><em>surface.</em></h1>
-      <p class="intro">不止分清陆与海，也要知道山有多高、海有多深。<br>给定经纬度，同时预测固体 / 水体与地表、海床高程。</p>
-      <div class="hero-tags"><span>Coordinate in</span><i aria-hidden="true">→</i><span>Solid / Water + Elevation out</span></div>
+      <p class="eyebrow"><span class="tiny-cross">+</span> GEOGRAPHIC REASONING BENCHMARK</p>
+      <h1 id="title">LAND <span class="hero-slash">/</span><br>WATER<span class="accent-dot">.</span></h1>
+      <p class="hero-extension"><span>+</span> ELEVATION</p>
+      <p class="intro">模型的世界知识，能还原多少地形？<br><span>只给经纬度，判断陆与海，预测山的高度、海的深度。</span></p>
+      <div class="hero-stats" aria-label="评测范围">
+        <div><strong id="terrain-count">—</strong><span>MODELS</span></div>
+        <div><strong>16,200</strong><span>COORDINATES / MODEL</span></div>
+        <div><strong>±500<small> m</small></strong><span>JOINT ACCURACY</span></div>
+      </div>
     </div>
-    <div class="hero-art" aria-hidden="true">
-      <svg viewBox="0 0 460 340" fill="none">
-        <defs><linearGradient id="land-fill" x1="230" y1="50" x2="230" y2="230" gradientUnits="userSpaceOnUse"><stop stop-color="#c9bcf7" stop-opacity=".8"/><stop offset="1" stop-color="#e8e0fc" stop-opacity=".15"/></linearGradient><linearGradient id="sea-fill" x1="230" y1="210" x2="230" y2="315" gradientUnits="userSpaceOnUse"><stop stop-color="#bbd5fb" stop-opacity=".1"/><stop offset="1" stop-color="#97b9ef" stop-opacity=".8"/></linearGradient></defs>
-        <ellipse cx="239" cy="173" rx="154" ry="139" stroke="#d9dbe8" stroke-dasharray="3 6"/>
-        <ellipse cx="239" cy="173" rx="87" ry="139" stroke="#e0e2ee"/>
-        <path d="M39 212H425M73 156H406M95 101H378M111 268H366M135 45V298M237 19V325M339 45V298" stroke="#e2e5ef"/>
-        <path d="M39 212L80 205L114 164L141 172L186 106L211 128L248 61L273 114L291 106L331 172L362 185L393 205L425 212Z" fill="url(#land-fill)" stroke="#8270c6" stroke-width="1.5"/>
-        <path d="M39 212L91 226L127 250L165 258L197 297L228 280L266 306L300 262L329 272L364 236L403 224L425 212Z" fill="url(#sea-fill)" stroke="#628dda" stroke-width="1.5"/>
-        <path d="M80 205L123 185L158 194L200 148L226 166L249 115L277 165L307 160L350 199L393 205M110 210L153 197L190 204L220 184L248 161L278 190L316 195L365 210" stroke="#a296ce" stroke-opacity=".6"/>
-        <path d="M91 226L139 230L190 263L231 254L265 278L304 239L344 245L403 224M124 222L170 240L225 231L272 251L317 224L365 225" stroke="#7a9bd0" stroke-opacity=".6"/>
-        <path d="M248 61V212M266 212V306" stroke="#7481a4" stroke-dasharray="3 4"/>
-        <circle cx="248" cy="61" r="4" fill="#7c60c4"/><circle cx="266" cy="306" r="4" fill="#416ddd"/>
-        <path d="M253 60H290M272 306H310" stroke="#8c93ad"/>
-        <text x="297" y="64" fill="#6f589f" font-size="12">+ elevation</text><text x="317" y="310" fill="#416ddd" font-size="12">− depth</text><text x="40" y="199" fill="#81889b" font-size="10">SEA LEVEL / 0 m</text>
-      </svg>
-      <span class="art-note">TERRAIN PROFILE · ILLUSTRATION</span>
+    <div class="hero-visual">
+      <div class="orbital-label"><span class="signal-dot"></span> THE WORLD, RECONSTRUCTED</div>
+      <canvas id="hero-globe" width="760" height="660" aria-label="按冻结参考高程绘制的旋转点阵地球"></canvas>
+      <div class="globe-caption"><span>89° N — 89° S</span><button id="motion-toggle" type="button" aria-pressed="true" aria-label="暂停地球动画">Ⅱ</button><span>ETOPO / GSHHG</span></div>
     </div>
   </section>
-
-  <section class="stats" aria-label="评测范围">
-    <div><span class="stat-label">全球采样点</span><strong>16,200<small> / model</small></strong></div>
-    <div><span class="stat-label">分类 + 高程</span><strong id="terrain-count">—<small> models</small></strong></div>
-    <div><span class="stat-label">独立分类任务</span><strong id="classification-count">—<small> models</small></strong></div>
-    <div><span class="stat-label">联合准确率容差</span><strong>±500<small> m</small></strong></div>
-  </section>
-
   <section id="leaderboard" class="leaderboard">
-    <div class="section-head"><div><p class="eyebrow">01 / THE LEADERBOARD</p><h2>One world. Two tasks.</h2></div><span class="section-note" id="load-status" aria-live="polite">读取已完成结果…</span></div>
+    <div class="section-head"><div><p class="eyebrow section-index">01 / THE RANKINGS</p><h2>Leaderboard<span class="accent-dot">.</span></h2></div><div class="section-aside"><span>分类正确 + 高程 ±500 m</span><button id="download-csv" class="icon-button" type="button" aria-label="下载排行榜 CSV" title="下载排行榜 CSV">↓</button></div></div>
+    <div class="table-toolbar">
+      <div class="filters" role="group" aria-label="模型系列筛选"><button data-family="all" class="active" aria-pressed="true">全部 <span id="count-all">—</span></button><button data-family="gpt" aria-pressed="false">GPT</button><button data-family="claude" aria-pressed="false">Claude</button><button data-family="other" aria-pressed="false">其他</button></div>
+      <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="model-search" type="search" placeholder="搜索模型" aria-label="搜索模型" autocomplete="off"><kbd>/</kbd></label>
+    </div>
     <div class="table-wrap" tabindex="0" role="region" aria-label="模型榜单，窄屏可横向滚动">
       <table>
-        <thead><tr><th scope="col">模型</th><th scope="col" class="primary-col">联合准确率<span>分类正确 + 高程 ±500 m</span></th><th scope="col">高程 MAE<span>联合任务 · 越低越好</span></th><th scope="col" class="classification-col">仅分类准确率<span>独立分类任务</span></th><th scope="col">覆盖率<span>联合任务</span></th></tr></thead>
+        <thead><tr><th scope="col">模型 <span class="th-en">MODEL</span></th><th scope="col" class="primary-col" aria-sort="descending">联合准确率 <b class="sort-arrow">↓</b><span>分类正确 + 高程 ±500 m</span></th><th scope="col">高程 MAE<span>联合任务 · 越低越好</span></th><th scope="col" class="classification-col">仅分类准确率<span>独立分类任务</span></th><th scope="col">覆盖率<span>联合任务</span></th></tr></thead>
         <tbody id="ranking"></tbody>
       </table>
+      <div id="empty-state" class="empty-state" hidden>没有匹配的模型。<button id="reset-filters" type="button">清除筛选 ↗</button></div>
     </div>
+    <div class="table-footer"><p>按联合准确率降序 · 面积加权 · 未决不计入分母，无效仍计错。<a href="#method">评分说明 ↗</a></p><span id="result-count" aria-live="polite">—</span></div>
     <p class="caption scroll-hint">左右滑动榜单，查看全部指标 →</p>
-    <p class="caption">默认按联合准确率降序 · 全部准确率按地表面积加权 · “仅分类”列来自单独回答固体 / 水体的历史任务。</p>
-    <p class="caption" id="version-note"></p>
+    <p class="caption" id="load-status" aria-live="polite">读取已完成结果…</p>
   </section>
-
-  <section id="explore">
-    <div class="section-head"><div><p class="eyebrow">02 / THE PREDICTED PLANET</p><h2>A model’s terrain.</h2></div><label>联合任务模型 <select id="model" disabled></select></label></div>
-    <div class="model-summary" id="model-summary" aria-live="polite"></div>
-    <div class="worlds">
-      <figure><figcaption><span class="panel-label">REFERENCE</span><span>ETOPO 2022</span></figcaption><canvas id="reference" aria-label="全球参考高程，可拖动旋转"></canvas></figure>
-      <figure><figcaption><span class="panel-label">PREDICTION</span><span id="selected-model">读取模型…</span></figcaption><canvas id="prediction" aria-label="模型预测高程，可拖动旋转" aria-busy="true"></canvas></figure>
+  <section id="explore" class="atlas-section">
+    <div class="section-head"><div><p class="eyebrow section-index">02 / BEYOND THE SCORE</p><h2>把答案，放回地球<span class="accent-dot">。</span></h2></div><p class="section-description">从陆海轮廓，到山脉和深海。<br>每个采样点都是一道题，点击查看真实回答。</p></div>
+    <div class="atlas-toolbar">
+      <div class="view-modes" role="group" aria-label="地图内容"><button data-layer="elevation" class="active" aria-pressed="true">高程地形</button><button data-layer="error" aria-pressed="false">错误分布</button><button data-layer="classification" aria-pressed="false">固体 / 水体</button></div>
+      <div class="projection-modes" role="group" aria-label="地图投影"><button data-view="globe" aria-pressed="false">3D 地球</button><button data-view="map" class="active" aria-pressed="true">平面地图</button></div>
     </div>
-    <div class="legend"><span class="water-dot">海床</span><span class="solid-dot">陆地 / 接地冰</span><span class="error-dot">联合判断错误</span><span>拖动旋转 · 点击采样点</span></div>
-    <p class="caption">高程径向夸张约 160 倍，显示范围 ±10,000 m。实际采样点直接绘制，未做地形插值；评分使用原始数值。</p>
+    <div class="worlds is-map" id="worlds">
+      <figure><figcaption><div class="map-heading"><span class="panel-letter">A</span><span class="panel-title">全球参考</span></div><span class="reference-badge">ETOPO 2022</span></figcaption><canvas id="reference" tabindex="0" aria-label="全球参考高程，可拖动旋转，方向键选择坐标"></canvas><div class="map-footer"><span>FROZEN REFERENCE</span><span>2° GLOBAL GRID</span></div></figure>
+      <figure><figcaption><div class="map-heading"><span class="panel-letter secondary">B</span><label><span class="sr-only">联合任务模型</span><select id="model" disabled></select></label></div><span id="prediction-score" class="panel-score" title="联合准确率 · ±500 m">—</span></figcaption><span id="selected-model" class="sr-only">读取模型…</span><canvas id="prediction" tabindex="0" aria-label="模型预测高程，可拖动旋转，方向键选择坐标" aria-busy="true"></canvas><div class="map-footer"><span>MODEL PREDICTION</span><span>DIRECT API · NO TOOLS</span></div></figure>
+    </div>
+    <div class="atlas-footer"><div class="legend" id="map-legend"></div><span id="hover-coordinate" aria-live="off">拖动旋转 · 点击采样点 ↗</span></div>
+    <p class="caption" id="plot-note"></p>
+    <div class="explore-bar"><span class="eyebrow">TAKE A CLOSER LOOK</span><button data-coordinate="33,85">青藏高原 <span>↗</span></button><button data-coordinate="11,143">西太平洋 <span>↗</span></button><button data-coordinate="47,-87">苏必利尔湖 <span>↗</span></button><button id="error-example">看一个错误 <span>↗</span></button><details class="coordinate-picker"><summary>定位坐标 <span>＋</span></summary><form id="coordinate-form"><label>纬度<input id="latitude" type="number" min="-90" max="90" step="any" value="33" required></label><label>经度<input id="longitude" type="number" min="-180" max="180" step="any" value="85" required></label><button type="submit" class="primary-button">查看 →</button></form></details></div>
+    <p id="explore-message" class="caption" aria-live="polite"></p>
+    <details class="model-stats"><summary>查看当前模型的更多指标 <span>±100 m / ±1,000 m · 分类 · 无效与未决</span></summary><div class="model-summary" id="model-summary" aria-live="polite"></div></details>
   </section>
-
-  <section class="analysis-grid">
-    <figure class="scatter-panel"><figcaption><span class="panel-label">HEIGHT AGREEMENT</span><span>参考 vs. 模型 · m</span></figcaption><canvas id="scatter" aria-label="参考高程与模型预测的散点图"></canvas></figure>
+  <section class="analysis-grid" id="inspect">
+    <figure class="scatter-panel"><figcaption><span class="panel-label">HEIGHT AGREEMENT</span><span>参考 vs. 模型 · m</span></figcaption><canvas id="scatter" aria-label="参考高程与模型预测的散点图"></canvas><div class="map-footer"><span>每个点代表一个有效高程回答</span><span>±500 m</span></div></figure>
     <div class="inspector">
-      <div class="section-head"><h2>Inspect a coordinate.</h2><div class="point-nav"><button id="previous" aria-label="上一个坐标">←</button><label class="sr-only" for="point">网格编号</label><input id="point" type="number" min="0" max="16199" value="6596" step="1"><button id="next" aria-label="下一个坐标">→</button></div></div>
+      <div class="section-head"><div><p class="eyebrow section-index">COORDINATE INSPECTOR</p><h2 id="point-title">Inspect a coordinate<span class="accent-dot">.</span></h2></div><div class="point-nav"><button id="previous" aria-label="上一个坐标">←</button><label class="sr-only" for="point">网格编号</label><input id="point" type="number" min="0" max="16199" value="6596" step="1"><button id="next" aria-label="下一个坐标">→</button></div></div>
       <p id="point-values" aria-live="polite"></p><p class="caption" id="point-error"></p>
       <details><summary>联合任务题目</summary><pre id="prompt"></pre></details>
       <details open><summary>分类 + 高程 · 原始回答</summary><pre id="answer">读取回答…</pre></details>
       <details id="classification-answer-panel"><summary>仅分类任务 · 同坐标回答 <span id="classification-label"></span></summary><p class="caption" id="classification-point-note"></p><pre id="classification-answer"></pre></details>
     </div>
   </section>
-
-  <section><div class="section-head"><div><p class="eyebrow">03 / THE HARD PARTS</p><h2>From peaks to the abyss.</h2></div><span class="section-note">各高程档的联合准确率 · ±500 m</span></div><div id="strata" class="strata"></div></section>
-
+  <section class="strata-section"><div class="section-head"><div><p class="eyebrow section-index">03 / THE HARD PARTS</p><h2>From peaks to the abyss<span class="accent-dot">.</span></h2></div><span class="section-note">各高程档的联合准确率 · ±500 m</span></div><div id="strata" class="strata"></div></section>
   <section class="method" id="method">
-    <div class="section-head"><div><p class="eyebrow">04 / HOW TO READ THE SCORES</p><h2>Same coordinates. Different questions.</h2></div></div>
-    <div class="method-grid"><article><span class="task-number">01</span><h3>分类 + 高程</h3><p>输入经纬度，预测 Solid / Water 和高程。普通陆地取裸地高程，接地冰取冰面高程，水体取海床或湖底高程。</p><p id="reference-coverage"></p></article><article><span class="task-number secondary">02</span><h3>仅分类</h3><p>对相同坐标，只回答固体或水体。独立任务的准确率单独列出，不是从高程任务的回答里再计算一次。</p><p>旧任务中的 Land 与本任务的 Solid 使用同一分类参考。已确认的同一模型名称合并展示，各任务保留原始运行名称。</p></article></div>
-    <details><summary>评分口径、数据来源与已知限制</summary><div class="method-details"><p>准确率按 cos(latitude) 加权。无效回答计错；未决请求从分子和分母剔除，覆盖率单独展示。MAE 仅统计可解析且参考高程有效的数值，包含分类错误的回答。</p><p>参考为 GSHHG 2.3.7 与 ETOPO 2022 的固定数据版本，包含测量及栅格误差。两个任务独立运行，提示词和推理预算不同，分数并非匹配计算量的对照实验。</p><p id="extraction-note"></p><p id="source-notes"></p></div></details>
+    <div class="method-intro"><p class="eyebrow section-index">04 / THE BENCHMARK</p><h2>One coordinate.<br><span>A whole world.</span></h2><p>模型只收到经纬度。<br>没有图片、地图、工具或 Agent 环境。</p><a class="source-link" href="https://x.com/celestepoasts/status/2103232383139057950" target="_blank" rel="noreferrer">查看原始实验灵感 ↗</a></div>
+    <div class="method-accordions">
+      <details open><summary><span>01</span>分类 + 高程<span class="toggle-sign">＋</span></summary><div class="detail-content"><p>同一个全球 2° 网格，共 16,200 个坐标。每点独立、单轮直接调用模型，预测 Solid / Water 和高程。</p><p>普通陆地取裸地高程，接地冰取冰面高程；水体取海床或湖底高程，不是水面海拔。</p><p id="reference-coverage"></p></div></details>
+      <details><summary><span>02</span>如何读榜单<span class="toggle-sign">＋</span></summary><div class="detail-content"><p>主榜按分类正确且高程误差 ≤500 m 的联合准确率降序排列。准确率按 cos(纬度) 加权，减少极区密集采样的偏差。</p><p>无效回答计错；接口未决及内容过滤从分子、分母剔除，覆盖率单列。MAE 统计可解析且参考高程有效的数值，包含分类错误的回答。</p><p id="extraction-note"></p></div></details>
+      <details><summary><span>03</span>仅分类成绩来自哪里<span class="toggle-sign">＋</span></summary><div class="detail-content"><p><span id="classification-count">—</span> 个模型在相同坐标上独立完成了「只回答 Land 或 Water」的任务。本页的“仅分类准确率”列来自这批独立回答，点开坐标也能查看原文。</p><p>它与联合任务内部的分类准确率是两个指标。旧任务中的 Land 对应本任务的 Solid，使用同一分类参考。</p><p id="version-note"></p></div></details>
+      <details><summary><span>04</span>参考、来源与限制<span class="toggle-sign">＋</span></summary><div class="detail-content"><p>冻结参考为 GSHHG 2.3.7 与 ETOPO 2022，仍有测量、栅格及边界误差。湖泊、漂浮冰架等高程未验收点保留分类结果，不参与高程评分。</p><p>两个任务独立运行，提示词和推理预算不同，并非等计算量的对照实验。模型名沿用网关实验别名，底层模型身份未独立认证；细小分差不等于稳定能力差异。</p><p id="source-notes"></p><p><a href="RESULTS.md">完整成绩与口径 ↗</a> · <a href="data.json" download>下载结果数据 ↓</a> · <a href="reference.details.json" download>冻结参考 ↓</a></p></div></details>
+    </div>
   </section>
-  <footer><span>LAND / WATER / ELEVATION</span><p>每点独立直接 API 请求 · 无 Agent、工具或地图输入</p><div><a href="RESULTS.md">结果与口径</a><a href="data.json" download>下载成绩</a><a href="reference.details.json" download>冻结参考</a><a href="THIRD_PARTY_NOTICES.md">数据许可</a><a href="https://github.com/Warren-swr/land-water-bench">GitHub</a></div></footer>
+  <footer class="site-footer"><a class="brand" href="#top">LAND<span class="brand-slash">/</span>WATER<span class="brand-suffix">+ ELEVATION</span></a><span>OPEN SOURCE · GEOGRAPHIC REASONING</span><div><a href="THIRD_PARTY_NOTICES.md">数据许可</a><a href="https://github.com/Warren-swr/land-water-bench">GitHub ↗</a><a href="#top">BACK TO TOP ↑</a></div></footer>
 </main>
 <script src="app.js"></script>
 </body>

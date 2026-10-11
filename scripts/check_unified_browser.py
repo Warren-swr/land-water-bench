@@ -1,9 +1,10 @@
 """Validate task attribution and the combined page against its saved data, without API calls."""
 import argparse
+import csv
 import json
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 def main():
@@ -38,12 +39,45 @@ def main():
             expected = pct(model["classification"]["metrics"]["weighted_accuracy"]) if model["classification"] else "—"
             assert cells.nth(3).inner_text() == expected, model["name"]
         assert scores == sorted(scores, reverse=True)
+        page.locator('[data-family="claude"]').click()
+        assert page.locator("#ranking tr").count() == 3
+        page.locator("#model-search").fill("haiku")
+        assert page.locator("#ranking tr").count() == 1
+        assert page.locator("#ranking tr").get_attribute("data-model") == "claude-haiku-5-5"
+        page.locator("#model-search").fill("no matching model")
+        assert page.locator("#empty-state").is_visible()
+        page.locator("#reset-filters").click()
+        assert page.locator("#ranking tr").count() == len(data["models"])
+        with page.expect_download() as download_info:
+            page.locator("#download-csv").click()
+        download_info.value.save_as(str(args.output / "leaderboard.csv"))
+        with (args.output / "leaderboard.csv").open(encoding="utf-8-sig") as file:
+            exported = list(csv.DictReader(file))
+        assert len(exported) == len(data["models"])
+        assert exported[0]["model"] == data["models"][0]["name"]
+        assert float(exported[0]["joint_accuracy_500"]) == scores[0]
+        page.evaluate("scrollTo({top:0,behavior:'instant'})")
+        page.wait_for_timeout(150)
+        hero = page.locator("#hero-globe")
+        before = hero.evaluate("c=>c.toDataURL()")
+        page.wait_for_timeout(160)
+        assert before != hero.evaluate("c=>c.toDataURL()")
+        page.locator("#motion-toggle").click()
+        paused = hero.evaluate("c=>c.toDataURL()")
+        page.wait_for_timeout(160)
+        assert paused == hero.evaluate("c=>c.toDataURL()")
+        page.emulate_media(reduced_motion="reduce")
+        page.wait_for_timeout(100)
+        assert page.locator("#motion-toggle").get_attribute("aria-pressed") == "false"
+        page.emulate_media(reduced_motion="no-preference")
+        expect(page.locator("#motion-toggle")).to_have_attribute("aria-pressed", "true")
+        page.locator("#motion-toggle").click()
         assert page.locator('#ranking tr[data-model="seed-2.1"]').count() == 1
         assert page.locator('#ranking tr[data-model="seed-2.1-0915"], #ranking tr[data-model="seed-2.1-0902"]').count() == 0
         seed = next(m for m in data["models"] if m["name"] == "seed-2.1")
         assert seed["terrain"]["source_model"] == "seed-2.1-0915"
         assert seed["classification"]["source_model"] == "seed-2.1-0902"
-        assert "同一模型" in page.locator("#version-note").inner_text()
+        assert "同一模型" in page.locator("#version-note").text_content()
         terrain_models = [m for m in data["models"] if m["terrain"]]
         point_checks = []
         for model in terrain_models:
@@ -75,6 +109,8 @@ def main():
             assert "#" + str(ident) in page.locator("#point-error").inner_text()
             if ident == point["id"]:
                 assert "不可评分" in page.locator("#point-values").inner_text()
+        page.locator('[data-view="globe"]').click()
+        page.wait_for_timeout(100)
         page.locator("#reference").scroll_into_view_if_needed()
         before = page.locator("#reference").evaluate("(c)=>c.toDataURL()")
         rect = page.locator("#reference").bounding_box()
@@ -83,6 +119,43 @@ def main():
         page.mouse.move(x + 95, y + 20, steps=8); page.mouse.up()
         page.wait_for_timeout(100)
         assert before != page.locator("#reference").evaluate("(c)=>c.toDataURL()")
+        page.locator('[data-view="map"]').click()
+        assert "is-map" in page.locator("#worlds").get_attribute("class")
+        page.wait_for_timeout(100)
+        height_map = page.locator("#prediction").evaluate("c=>c.toDataURL()")
+        page.locator('[data-layer="error"]').click()
+        page.wait_for_timeout(100)
+        error_map = page.locator("#prediction").evaluate("c=>c.toDataURL()")
+        assert height_map != error_map
+        assert "联合错误" in page.locator("#map-legend").inner_text()
+        page.locator('[data-layer="classification"]').click()
+        page.wait_for_timeout(100)
+        assert error_map != page.locator("#prediction").evaluate("c=>c.toDataURL()")
+        assert "另一次独立任务" in page.locator("#plot-note").inner_text()
+        sample = 3796
+        rect = page.locator("#reference").bounding_box()
+        page.locator("#reference").click(position={"x": (sample % 180 + .5) / 180 * rect["width"],
+                                                   "y": (sample // 180 + .5) / 90 * rect["height"]})
+        expect(page.locator("#point")).to_have_value("3796")
+        page.locator('[data-coordinate="47,-87"]').click()
+        expect(page.locator("#point-title")).to_have_text("47° N / 87° W")
+        assert "不可评分" in page.locator("#point-values").inner_text()
+        page.locator(".coordinate-picker > summary").click()
+        page.locator("#latitude").fill("33")
+        page.locator("#longitude").fill("85")
+        page.locator("#coordinate-form button").click()
+        expect(page.locator("#point-title")).to_have_text("33° N / 85° E")
+        page.locator("#error-example").click()
+        page.wait_for_timeout(100)
+        selected = int(page.locator("#point").input_value())
+        astra = next(m for m in data["models"] if m["name"] == "gpt-6-astra")
+        row = page.request.get(args.url + astra["terrain"]["details_url"]).json()[str(selected)]
+        truth = ref["points"][selected]
+        assert truth["elevation_m"] is not None
+        assert row["status"] == "invalid" or row["label"] != truth["truth"] or abs(row["prediction"]["elevation_m"] - truth["elevation_m"]) > 500
+        page.locator('[data-layer="elevation"]').click()
+        page.locator("#explore").screenshot(path=str(args.output / "atlas-map.png"))
+        page.locator('[data-view="map"]').click()
         layouts = []
         for width in [1440, 768, 390, 320]:
             page.set_viewport_size({"width": width, "height": 1080})
@@ -103,6 +176,8 @@ def main():
                  "task_columns_verified": True, "seed_aliases_merged": True, "source_aliases_preserved": True,
                  "point_checks": point_checks,
                  "reference_mask_checked": True, "rotation_checked": True, "layouts": layouts, "browser_errors": errors}
+        proof.update(filters_checked=True, csv_checked=True, hero_motion_checked=True,
+                     map_layers_checked=True, coordinate_navigation_checked=True)
         (args.output / "verification.json").write_text(json.dumps(proof, ensure_ascii=False, indent=2) + "\n")
         print(json.dumps(proof, ensure_ascii=False))
         browser.close()
