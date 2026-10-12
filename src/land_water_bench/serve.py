@@ -15,14 +15,20 @@ class Handler(SimpleHTTPRequestHandler):
         relative = unquote(urlsplit(self.path).path).lstrip("/") or "index.html"
         allowed = {"index.html", "app.js", "style.css", "data.json", "comparison.png", "RESULTS.md",
                    "display.ttf", "FONT-LICENSE.txt", "LICENSE", "THIRD_PARTY_NOTICES.md",
-                   "GSHHG-LICENSE.txt", "GSHHG-GPL.txt"}
-        if "/" in relative or "\\" in relative or relative.startswith(".") or not (
+                   "GSHHG-LICENSE.txt", "GSHHG-GPL.txt",
+                   "atlas.json", "atlas.js", "charts.js", "globe.js", "palette.js"}
+        vendored = {"vendor/three.module.min.js", "vendor/THREE-LICENSE.txt", "vendor/README.txt"}
+        if relative in vendored:
+            expected = Path(self.directory).resolve() / "vendor"
+        elif "/" in relative or "\\" in relative or relative.startswith(".") or not (
             relative in allowed or relative.endswith(".details.json")
         ):
             self.send_error(404)
             return False
+        else:
+            expected = Path(self.directory).resolve()
         resolved = (Path(self.directory) / relative).resolve()
-        if resolved.parent != Path(self.directory).resolve():
+        if resolved.parent != expected:
             self.send_error(404)
             return False
         return True

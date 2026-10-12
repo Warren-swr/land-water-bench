@@ -96,3 +96,32 @@ def test_tolerance_curve_follows_official_inclusion_rules():
     with pytest.raises(ValueError, match="disagrees"):
         build_atlas(points, [("m", {"joint_accuracy": {"100": .5, "500": 1 / 3, "1000": 1 / 3}}, records)])
     assert build_atlas(points, [("m", metrics, records)])["models"]["m"]["tolerance_curve"][4] == 1 / 3
+
+
+def test_dashboard_server_allows_page_modules_and_only_the_vendored_three_files(tmp_path):
+    import threading
+    import urllib.error
+    import urllib.request
+    from functools import partial
+    from http.server import ThreadingHTTPServer
+
+    from land_water_bench.serve import Handler
+
+    (tmp_path / "vendor").mkdir()
+    for name in ["index.html", "atlas.json", "globe.js", "vendor/three.module.min.js", "vendor/other.js", ".env"]:
+        (tmp_path / name).write_text("x")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=str(tmp_path)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    status = lambda path: _status(urllib, f"http://127.0.0.1:{server.server_port}/{path}")
+    try:
+        assert [status(p) for p in ["", "atlas.json", "globe.js", "vendor/three.module.min.js"]] == [200] * 4
+        assert [status(p) for p in ["vendor/other.js", ".env", "vendor/../.env", "vendor/"]] == [404] * 4
+    finally:
+        server.shutdown()
+
+
+def _status(urllib, url):
+    try:
+        return urllib.request.urlopen(url).status
+    except urllib.error.HTTPError as error:
+        return error.code
